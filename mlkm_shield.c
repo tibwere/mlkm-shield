@@ -8,7 +8,6 @@
  *
  * If these modify some memory areas judged 'critical' (e.g. sys_call_table, IDT) we proceed with
  * the revert of the changes and with the disassembly of the module
-
  *
  * @author Simone Tiberi
  */
