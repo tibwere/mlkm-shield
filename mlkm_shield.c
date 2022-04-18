@@ -1,3 +1,17 @@
+/**
+ * @file mlkm_shield.c
+ * @brief This is the source file for the MLKM_SHIELD (Malicious Loadable Kernel Module).
+ *
+ * Taking advantage of the kretprobing mechanism offered by the Linux kernel, several internal kernel
+ * functions are hooked (e.g. do_init_module, __tasklet_schedule_common) in order to verify the
+ * behavior of the LKMs.
+ *
+ * If these modify some memory areas judged 'critical' (e.g. sys_call_table, IDT) we proceed with
+ * the revert of the changes and with the disassembly of the module
+
+ *
+ * @author Simone Tiberi
+ */
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/slab.h>
