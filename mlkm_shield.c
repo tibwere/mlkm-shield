@@ -246,7 +246,12 @@ static int verify_safe_areas(struct kretprobe_instance *ki, struct pt_regs *regs
         }
 
         atomic_set(&barrier, 0);
-        good ? pr_info(KBUILD_MODNAME ": no threat detected") : free_module(curr_module);
+        if (likely(good == 1)) {
+                pr_info(KBUILD_MODNAME ": no threat detected");
+        } else {
+                if (free_module != NULL)
+                        free_module(curr_module);
+        }
 
         curr_module = NULL;
         return 0;
