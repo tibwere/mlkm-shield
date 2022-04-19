@@ -13,7 +13,6 @@
  */
 #include <linux/module.h>
 #include <linux/version.h>
-#include <linux/slab.h>
 #include <linux/kprobes.h>
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(5,7,0)
@@ -29,7 +28,7 @@
 struct safe_area {
         unsigned long *addr;
         unsigned long value;
-} *areas;
+} areas[NR_syscalls];
 
 /**
  * barrier - cache-aligned variable (64B) used to synchronize the various
@@ -38,10 +37,68 @@ struct safe_area {
 static atomic_t barrier __attribute__((aligned(64)));
 
 /**
- * currently_loading_module - Address associated with the
- * struct module being mounted
+ * curr_module - Address associated with the struct module being mounted
  */
-static struct module *currently_loading_module;
+static struct module *curr_module;
+
+/**
+ * cr0 - cached value of CR0 register
+ * (used to unprotect/protect memory mechanism)
+ */
+static unsigned long cr0;
+
+/**
+ * kallsyms_lookup_name_t - prototype of the kallsyms_lookup_name function
+ * (from kernel version 5.7 no longer exposed)
+ */
+typedef unsigned long (*kallsyms_lookup_name_t)(const char *name);
+
+/**
+ * free_module_t - prototype of the free_module function (not exposed)
+ */
+typedef void (*free_module_t)(struct module *mod);
+
+
+/**
+ * __get_kallsysm_lookup_name - helper function for retrieving the address where the
+ * kallsyms_lookup_name function is present in memory
+ *
+ * @return function pointer (kallsyms_lookup_name_t type)
+ */
+static kallsyms_lookup_name_t __get_kallsysm_lookup_name(void)
+{
+        struct kprobe kp = {
+                .symbol_name = "kallsyms_lookup_name"
+        };
+	kallsyms_lookup_name_t symb;
+
+        if (likely(!register_kprobe(&kp))) {
+	        symb = (kallsyms_lookup_name_t) kp.addr;
+	        unregister_kprobe(&kp);
+
+                return (kallsyms_lookup_name_t)symb;
+        }
+
+        return NULL;
+}
+
+
+/**
+ * get_free_module - helper function for retrieving the address where the
+ * free_module function is present in memory
+ *
+ * @return function pointer (free_module_t type)
+ */
+static free_module_t get_free_module(void)
+{
+#if KPROBE_LOOKUP
+        kallsyms_lookup_name_t kallsyms_lookup_name = __get_kallsysm_lookup_name();
+        if (unlikely(kallsyms_lookup_name == NULL))
+                return NULL;
+#endif
+
+        return (free_module_t)kallsyms_lookup_name("free_module");
+}
 
 
 /**
@@ -57,18 +114,9 @@ static unsigned long *get_system_call_table_address(void)
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(4,4,0)
 #ifdef KPROBE_LOOKUP
-        struct kprobe kp = {
-                .symbol_name = "kallsyms_lookup_name"
-        };
-	typedef unsigned long (*kallsyms_lookup_name_t)(const char *name);
-	kallsyms_lookup_name_t kallsyms_lookup_name;
-
-        if (likely(!register_kprobe(&kp))) {
-	        kallsyms_lookup_name = (kallsyms_lookup_name_t) kp.addr;
-	        unregister_kprobe(&kp);
-        } else {
+	kallsyms_lookup_name_t kallsyms_lookup_name = __get_kallsysm_lookup_name();
+        if (unlikely(kallsyms_lookup_name == NULL))
                 return NULL;
-        }
 #endif
         addr = (unsigned long *)kallsyms_lookup_name("sys_call_table");
         return addr;
@@ -102,10 +150,6 @@ static int cache_safe_areas(void)
 
         pr_debug(KBUILD_MODNAME ": system call table address is 0x%lx", (unsigned long)system_call_table);
 
-        areas = kzalloc(NR_syscalls * sizeof(struct safe_area), GFP_KERNEL);
-        if (unlikely(areas == NULL))
-                return -ENOMEM;
-
         for (i = 0; i < NR_syscalls; ++i) {
                 areas[i].addr = &(system_call_table[i]);
                 areas[i].value = system_call_table[i];
@@ -135,6 +179,40 @@ static void let_verify(void *info) {
 
 
 /**
+ * __write_to_cr0 - function that uses inline ASM to overwrite the CR0 register
+ *
+ * @param new: new value to store in CR0 register
+ */
+static void __always_inline __write_to_cr0(unsigned long new) {
+        /* See https://elixir.bootlin.com/linux/v5.17.3/source/arch/x86/include/asm/special_insns.h#L54 */
+        asm volatile("mov %0,%%cr0": : "r" (new) : "memory");
+}
+
+/**
+ * These macros allow you to delimit a portion of code that can be accessed
+ * in an arbitrary way both on registers and in memory (thanks to the overwriting of cr0)
+ */
+#define START_UNPROTECTED_EDITING __write_to_cr0(cr0 & ~0x00010000)
+#define END_UNPROTECTED_EDITING   __write_to_cr0(cr0)
+
+
+/**
+ * revert_to_good_state - Function that allows you to revert the changes
+ * made by the malicious LKM before removing it
+ *
+ * @param: address of the safe_area structure to be considered for revert
+ */
+static void __always_inline revert_to_good_state(struct safe_area *a)
+{
+        START_UNPROTECTED_EDITING;
+        *(a->addr) = a->value;
+        END_UNPROTECTED_EDITING;
+        pr_alert(KBUILD_MODNAME ": memory state at 0x%lx restored (value: 0x%lx)",
+                 (unsigned long)a->addr, *(a->addr));
+}
+
+
+/**
  * verify_safe_areas - post handler of the do_init_module function in which
  * the comparison is made between the cached values of the critical locations
  * and the current ones.
@@ -146,6 +224,11 @@ static void let_verify(void *info) {
 static int verify_safe_areas(struct kretprobe_instance *ki, struct pt_regs *regs)
 {
         int i, good;
+        free_module_t free_module;
+
+        free_module = get_free_module();
+        if (unlikely(free_module == NULL))
+                pr_warn(KBUILD_MODNAME ": free_module symbol not found so it will be impossibile to remove module if necessary");
 
         /* Assume initially that module is not malicious */
         good = 1;
@@ -153,19 +236,19 @@ static int verify_safe_areas(struct kretprobe_instance *ki, struct pt_regs *regs
         pr_info(KBUILD_MODNAME ": start analysis");
         for (i = 0; i < NR_syscalls; ++i) {
                 if (*(areas[i].addr) != areas[i].value) {
-                        pr_alert(KBUILD_MODNAME ": rootkit detected [memory at 0x%lx has changed]", (unsigned long)areas[i].addr);
+                        pr_alert(KBUILD_MODNAME ": rootkit detected [memory at 0x%lx has changed (previous: 0x%lx, current: 0x%lx)]",
+                                (unsigned long)areas[i].addr,
+                                areas[i].value,
+                                *(areas[i].addr));
                         good = 0;
-
-                        /*TODO: revert changes (by unprotect/protect memory) and unload malicious module */
+                        revert_to_good_state(&(areas[i]));
                 }
         }
 
-        if (good)
-                pr_info(KBUILD_MODNAME ": no threat detected");
-
         atomic_set(&barrier, 0);
+        good ? pr_info(KBUILD_MODNAME ": no threat detected") : free_module(curr_module);
 
-        currently_loading_module = NULL;
+        curr_module = NULL;
         return 0;
 }
 
@@ -185,10 +268,9 @@ static int atom_insmod(struct kretprobe_instance *ki, struct pt_regs *regs)
          * static noinline int do_init_module(struct module *mod)
          * in the x86 convention, the first parameter is stored in the RDI register
          */
-        currently_loading_module = (struct module *)regs->di;
-        pr_debug(KBUILD_MODNAME ": module installation at address 0x%lx is taking place on CPU core %d",
-                 (unsigned long)currently_loading_module,
-                 smp_processor_id());
+        curr_module = (struct module *)regs->di;
+        pr_debug(KBUILD_MODNAME ": module \"%s\" (@ 0x%lx) installation is taking place on CPU core %d",
+                curr_module->name, (unsigned long)curr_module, smp_processor_id());
 
         atomic_set(&barrier, 1);
         smp_call_function(let_verify, NULL, 0);
@@ -201,7 +283,7 @@ static int atom_insmod(struct kretprobe_instance *ki, struct pt_regs *regs)
  */
 static struct kretprobe mount_kretprobe = {
         .entry_handler       = atom_insmod,
-        .handler = verify_safe_areas,
+        .handler             = verify_safe_areas,
 };
 
 
@@ -211,6 +293,8 @@ static struct kretprobe mount_kretprobe = {
 static int __init mlkm_shield_init(void)
 {
         int ret;
+
+        cr0 = read_cr0();
 
         ret = cache_safe_areas();
         if (unlikely(ret != 0))
