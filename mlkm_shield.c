@@ -30,14 +30,21 @@ struct safe_area {
         unsigned long value;
 } areas[NR_syscalls];
 
-/**
- * barrier - cache-aligned variable (64B) used to synchronize the various
- * CPUs through the IPI mechanism
- */
-static atomic_t barrier __attribute__((aligned(64)));
 
 /**
- * curr_module - Address associated with the struct module being mounted
+ * sync_enter - synchronization barrier on which the master spins
+ * until all workers have started executing the function
+ */
+static atomic_t sync_enter __attribute__((aligned(64)));
+
+/**
+ * sync_leave - synchronization barrier on which the worker spins
+ * until the master has completed verification
+ */
+static atomic_t sync_leave __attribute__((aligned(64)));
+
+/**
+ * curr_module - address associated with the struct module being mounted
  */
 static struct module *curr_module;
 
@@ -170,10 +177,15 @@ static int cache_safe_areas(void)
  */
 static void let_verify(void *info) {
         unsigned int cpuid;
-
         cpuid = smp_processor_id();
+
         pr_debug(KBUILD_MODNAME ": core %d wait until verification is completed", cpuid);
-        // while(atomic_read(&barrier));
+
+        atomic_dec(&sync_enter);
+        // preempt_disable();
+        // while(atomic_read(&sync_leave) > 0);
+        // preempt_enable();
+
         pr_debug(KBUILD_MODNAME ": core %d resumes work left earlier", cpuid);
 }
 
@@ -245,7 +257,8 @@ static int verify_safe_areas(struct kretprobe_instance *ki, struct pt_regs *regs
                 }
         }
 
-        atomic_set(&barrier, 0);
+        atomic_set(&sync_leave, 0);
+        preempt_enable();
         if (likely(good == 1)) {
                 pr_info(KBUILD_MODNAME ": no threat detected");
         } else {
@@ -277,8 +290,14 @@ static int atom_insmod(struct kretprobe_instance *ki, struct pt_regs *regs)
         pr_debug(KBUILD_MODNAME ": module \"%s\" (@ 0x%lx) installation is taking place on CPU core %d",
                 curr_module->name, (unsigned long)curr_module, smp_processor_id());
 
-        atomic_set(&barrier, 1);
-        smp_call_function(let_verify, NULL, 0);
+        atomic_set(&sync_enter, num_online_cpus() - 1);
+        atomic_set(&sync_leave, 1);
+
+        preempt_disable();
+        smp_call_function_many(cpu_online_mask, let_verify, NULL, false);
+
+        while (atomic_read(&sync_enter) > 0);
+        pr_debug(KBUILD_MODNAME ": all cores are syncronized");
         return 0;
 }
 
