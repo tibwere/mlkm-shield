@@ -457,7 +457,7 @@ static struct kretprobe mount_kretprobe = {
 /**
  * tasklet_kretprobe - kretprobe to hook to __tasklet_schedule
  */
-static struct kprobe tasklet_kretprobe = {
+static struct kprobe tasklet_kprobe = {
         .symbol_name   = "__tasklet_schedule",
         .pre_handler = prepare_tasklet_shield,
 };
@@ -482,7 +482,7 @@ static int __init mlkm_shield_init(void)
                 return -EINVAL;
         }
 
-        if (unlikely(register_kprobe(&tasklet_kretprobe))) {
+        if (unlikely(register_kprobe(&tasklet_kprobe))) {
                 pr_info(KBUILD_MODNAME ": impossibile to hook \"__tasklet_schedule\" function");
                 return -EINVAL;
         }
@@ -499,6 +499,7 @@ static int __init mlkm_shield_init(void)
 static void __exit mlkm_shield_cleanup(void)
 {
         unregister_kretprobe(&mount_kretprobe);
+        unregister_kprobe(&tasklet_kprobe);
         pr_info(KBUILD_MODNAME ": successfully removed");
 }
 
