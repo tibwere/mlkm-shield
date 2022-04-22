@@ -406,6 +406,9 @@ static int prepare_tasklet_shield(struct kprobe *kp, struct pt_regs *regs)
         struct tasklet_shield *the_shield;
         struct tasklet_struct *the_tasklet;
 
+        if (likely(curr_module == NULL))
+                return 0;
+
         /*
          * in the x86 convention, the first parameter is stored in the RDI register
          */
