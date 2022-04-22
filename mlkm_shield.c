@@ -3,7 +3,7 @@
  * @brief This is the source file for the MLKM_SHIELD (Malicious Loadable Kernel Module).
  *
  * Taking advantage of the kretprobing mechanism offered by the Linux kernel, several internal kernel
- * functions are hooked (e.g. do_init_module, __tasklet_schedule_common) in order to verify the
+ * functions are hooked (e.g. do_init_module, __tasklet_schedule) in order to verify the
  * behavior of the LKMs.
  *
  * If these modify some memory areas judged 'critical' (e.g. sys_call_table, IDT) we proceed with
@@ -14,6 +14,9 @@
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/kprobes.h>
+#include <linux/slab.h>
+#include <asm-generic/rwonce.h>
+#include <asm-generic/kprobes.h>
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(5,7,0)
 #define KPROBE_LOOKUP (1)
@@ -29,6 +32,18 @@ struct safe_area {
         unsigned long *addr;
         unsigned long value;
 } areas[NR_syscalls];
+
+
+/**
+ * tasklet_shield - structure used to exploit the container_of mechanism
+ * inside the hooks installed at the entrypoints of the deferred work in
+ * order to find additional information (e.g. reference to the module
+ * in which the function is defined)
+ */
+struct tasklet_shield {
+        struct module *module;
+        struct kretprobe probe;
+};
 
 
 /**
@@ -225,15 +240,14 @@ static void __always_inline revert_to_good_state(struct safe_area *a)
 
 
 /**
- * verify_safe_areas - post handler of the do_init_module function in which
- * the comparison is made between the cached values of the critical locations
- * and the current ones.
+ * verify_safe_areas - function in which the comparison is made between the cached
+ * values of the critical locations and the current ones.
  *
- * @param ki:   not used (according to kretprobe_handler_t)
- * @param regs: not used (according to kretprobe_handler_t)
- * @return:     always 0 (not used)
+ * If a change in the state of the critical memory areas is identified, revert is performed.
+ *
+ * @param the_module: module currently being analyzed
  */
-static int verify_safe_areas(struct kretprobe_instance *ki, struct pt_regs *regs)
+static void __verify_safe_areas(struct module *the_module)
 {
         int i, good;
         free_module_t free_module;
@@ -259,14 +273,97 @@ static int verify_safe_areas(struct kretprobe_instance *ki, struct pt_regs *regs
 
         atomic_set(&sync_leave, 0);
         preempt_enable();
+
         if (likely(good == 1)) {
                 pr_info(KBUILD_MODNAME ": no threat detected");
         } else {
                 if (free_module != NULL)
-                        free_module(curr_module);
+                        free_module(the_module);
         }
+}
 
+
+/**
+ * verify_safe_areas_init - __verify_safe_areas wrapper used as pre_handler of the
+ * do_init_module function
+ *
+ * @param ki:   not used (according to kretprobe_handler_t)
+ * @param regs: not used (according to kretprobe_handler_t)
+ * @return:     always 0 (not used)
+ */
+static int verify_safe_areas_init(struct kretprobe_instance *ki, struct pt_regs *regs)
+{
+        __verify_safe_areas(curr_module);
         curr_module = NULL;
+
+        return 0;
+}
+
+
+/**
+ * verify_safe_areas_init - __verify_safe_areas wrapper used as pre_handler of the
+ * tasklet entrypoint function
+ *
+ * @param ki:   used to retrieve address of kretprobe structure associated with kretprobe_instance
+ * @param regs: not used (according to kretprobe_handler_t)
+ * @return:     always 0 (not used)
+ */
+static int verify_safe_areas_tasklet(struct kretprobe_instance *ki, struct pt_regs *regs)
+{
+        struct kretprobe *kp;
+        struct tasklet_shield *shield;
+
+        kp = get_kretprobe(ki);
+        shield = (struct tasklet_shield *)container_of(kp, struct tasklet_shield, probe);
+
+        __verify_safe_areas(shield->module);
+
+        kfree(shield);
+
+        return 0;
+}
+
+
+/**
+ * __sync_master - function that allows you to request the execution of a certain
+ * function (fn) from the other CPU cores online
+ *
+ * @param: fn: the function to perform
+ */
+static void __sync_master(smp_call_func_t fn)
+{
+        atomic_set(&sync_enter, num_online_cpus() - 1);
+        atomic_set(&sync_leave, 1);
+
+        preempt_disable();
+        smp_call_function_many(cpu_online_mask, fn, NULL, false);
+
+        while (atomic_read(&sync_enter) > 0);
+        pr_debug(KBUILD_MODNAME ": all cores are syncronized");
+}
+
+/**
+ * atom_tasklet - pre handler of each tasklet entrypoint function in which the execution of the synchronization
+ * function is requested from the other CPU cores
+ *
+ * @param ki:   used to retrieve address of kretprobe structure associated with kretprobe_instance
+ * @param regs: not used (according to kretprobe_handler_t)
+ * @return:     always 0 (not used)
+ */
+
+static int atom_tasklet(struct kretprobe_instance *ki, struct pt_regs *regs)
+{
+        /* See https://elixir.bootlin.com/linux/v5.17.3/source/include/linux/kprobes.h#L232 */
+        struct kretprobe *kp;
+        struct tasklet_shield *shield;
+
+        kp = get_kretprobe(ki);
+        shield = (struct tasklet_shield *)container_of(kp, struct tasklet_shield, probe);
+        pr_debug(KBUILD_MODNAME ": function at 0x%lx of module \"%s\" is starting to run on CPU core %d",
+                (unsigned long)(shield->probe).kp.addr, shield->module->name, smp_processor_id());
+
+        __sync_master(let_verify);
+
         return 0;
 }
 
@@ -283,21 +380,64 @@ static int verify_safe_areas(struct kretprobe_instance *ki, struct pt_regs *regs
 static int atom_insmod(struct kretprobe_instance *ki, struct pt_regs *regs)
 {
         /*
-         * static noinline int do_init_module(struct module *mod)
          * in the x86 convention, the first parameter is stored in the RDI register
          */
         curr_module = (struct module *)regs->di;
         pr_debug(KBUILD_MODNAME ": module \"%s\" (@ 0x%lx) installation is taking place on CPU core %d",
                 curr_module->name, (unsigned long)curr_module, smp_processor_id());
 
-        atomic_set(&sync_enter, num_online_cpus() - 1);
-        atomic_set(&sync_leave, 1);
+        __sync_master(let_verify);
 
-        preempt_disable();
-        smp_call_function_many(cpu_online_mask, let_verify, NULL, false);
+        return 0;
+}
 
-        while (atomic_read(&sync_enter) > 0);
-        pr_debug(KBUILD_MODNAME ": all cores are syncronized");
+
+/**
+ * prepare_tasklet_shield - allocates the tasklet_shield structure,
+ * populates its fields and registers the probe to the function associated
+ * with the tasklet passed as a parameter
+ *
+ * @param kp:   not used (according to kprobe_pre_handler_t)
+ * @param regs: not used (according to kprobe_pre_handler_t)
+ * @return 0 if ok, -E otherwise
+ */
+static int prepare_tasklet_shield(struct kprobe *kp, struct pt_regs *regs)
+{
+        struct tasklet_shield *the_shield;
+        struct tasklet_struct *the_tasklet;
+
+        /*
+         * in the x86 convention, the first parameter is stored in the RDI register
+         */
+        the_tasklet = (struct tasklet_struct *)regs->di;
+
+        the_shield = (struct tasklet_shield *)kzalloc(sizeof(struct tasklet_shield), GFP_ATOMIC);
+        if (unlikely(the_shield == NULL)) {
+                pr_warn(KBUILD_MODNAME ": failed to allocate memory for module \"%s\" deferred work monitoring",
+                        curr_module->name);
+
+                return -ENOMEM;
+        }
+
+        the_shield->module = curr_module;
+
+        if (the_tasklet->use_callback)
+                (the_shield->probe).kp.addr = (kprobe_opcode_t *)the_tasklet->callback;
+        else
+                (the_shield->probe).kp.addr = (kprobe_opcode_t *)the_tasklet->func;
+
+        (the_shield->probe).entry_handler = atom_tasklet;
+        (the_shield->probe).handler = verify_safe_areas_tasklet;
+
+        if (unlikely(register_kretprobe(&(the_shield->probe)))) {
+                pr_info(KBUILD_MODNAME ": impossibile to hook function at 0x%lx in module \"%s\" (TASKLET)",
+                        (unsigned long)(the_shield->probe).kp.addr, the_shield->module->name);
+                return -EINVAL;
+        }
+
+        pr_info(KBUILD_MODNAME ": hooked function at 0x%lx in module \"%s\" (TASKLET)",
+                        (unsigned long)(the_shield->probe).kp.addr, the_shield->module->name);
+
         return 0;
 }
 
@@ -307,7 +447,16 @@ static int atom_insmod(struct kretprobe_instance *ki, struct pt_regs *regs)
  */
 static struct kretprobe mount_kretprobe = {
         .entry_handler       = atom_insmod,
-        .handler             = verify_safe_areas,
+        .handler             = verify_safe_areas_init,
+};
+
+
+/**
+ * tasklet_kretprobe - kretprobe to hook to __tasklet_schedule
+ */
+static struct kprobe tasklet_kretprobe = {
+        .symbol_name   = "__tasklet_schedule",
+        .pre_handler = prepare_tasklet_shield,
 };
 
 
@@ -326,7 +475,12 @@ static int __init mlkm_shield_init(void)
 
         mount_kretprobe.kp.symbol_name = "do_init_module";
         if (unlikely(register_kretprobe(&mount_kretprobe))) {
-                pr_info(KBUILD_MODNAME ": impossibile to hook do_init_module function");
+                pr_info(KBUILD_MODNAME ": impossibile to hook \"do_init_module\" function");
+                return -EINVAL;
+        }
+
+        if (unlikely(register_kprobe(&tasklet_kretprobe))) {
+                pr_info(KBUILD_MODNAME ": impossibile to hook \"__tasklet_schedule\" function");
                 return -EINVAL;
         }
 
