@@ -59,7 +59,7 @@ struct module_probe {
 /**
  * monitored_modules_list - head of the list of monitored modules
  */
-LIST_HEAD(monitored_modules_list);
+static LIST_HEAD(monitored_modules_list);
 
 /**
  * sync_enter - synchronization barrier on which the master spins
@@ -320,12 +320,25 @@ static int verify_safe_areas_modfn(struct kretprobe_instance *ri, struct pt_regs
 static void remove_malicious_lkm(struct monitored_module *the_module)
 {
         free_module_t free_module;
+        struct module_probe *curr_mp, *tmp;
 
         free_module = get_free_module();
         if (unlikely(free_module == NULL))
                 pr_warn(KBUILD_MODNAME ": free_module symbol not found so it will be impossibile to remove module if necessary");
 
-        //TODO to be implemented
+        list_for_each_entry_safe(curr_mp, tmp, &(the_module->probes), links) {
+                pr_debug(KBUILD_MODNAME ": removed the probe to \"%s\" in module \"%s\"",
+                        (curr_mp->probe).kp.symbol_name, the_module->module->name);
+
+                unregister_kretprobe(&(curr_mp->probe));
+                list_del(&(curr_mp->links));
+                kfree(curr_mp);
+        }
+
+        pr_debug(KBUILD_MODNAME ": removed \"%s\" from monitored modules", the_module->module->name);
+        list_del(&(the_module->links));
+        free_module(the_module->module);
+        kfree(the_module);
 }
 
 
@@ -404,6 +417,7 @@ static int start_monitoring_module(struct kretprobe_instance *ri, struct pt_regs
         the_monitored_module->module = (struct module *)regs->di;
         INIT_LIST_HEAD(&(the_monitored_module->probes));
 
+        list_add(&(the_monitored_module->links), &monitored_modules_list);
         sync_master();
 
         curr_module = the_monitored_module;
@@ -448,16 +462,22 @@ static int attach_kretprobe_on(const char *symbol_name)
         struct module_probe *mp;
 
         mp = (struct module_probe *)kzalloc(sizeof(struct module_probe), GFP_KERNEL);
-        if (unlikely(mp == NULL))
+        if (unlikely(mp == NULL)) {
+                pr_debug(KBUILD_MODNAME ": unable to allocate memory for module_probe structure")
                 return -ENOMEM;
+        }
 
         mp->owner = curr_module;
         (mp->probe).kp.symbol_name = symbol_name;
         (mp->probe).entry_handler = enable_single_core_execution;
         (mp->probe).handler = verify_safe_areas_modfn;
 
-        if(register_kretprobe(&(mp->probe)))
+        if(register_kretprobe(&(mp->probe))) {
+                pr_debug(KBUILD_MODNAME ": impossibile to hook \"%s\" (module: \"%s\")",
+                         symbol_name, curr_module->module->name);
+
                 return -EINVAL;
+        }
 
         list_add(&(mp->links), &(curr_module->probes));
         pr_debug(KBUILD_MODNAME ": kretprobe successfully attached to \"%s\" (module: \"%s\")",
@@ -474,12 +494,12 @@ static int attach_kretprobe_on(const char *symbol_name)
  */
 static int attach_kretprobe_on_each_symbol(void)
 {
-        int i, ret, ok;
+        int i, fail;
         const Elf_Sym *sym;
         const char *symbol_name;
         struct mod_kallsyms *kallsyms;
 
-        ok = 1;
+        fail = 0;
         kallsyms = curr_module->module->kallsyms;
         for (i = 0; i < kallsyms->num_symtab; ++i) {
                 sym = &(kallsyms->symtab[i]);
@@ -488,12 +508,12 @@ static int attach_kretprobe_on_each_symbol(void)
                         pr_debug(KBUILD_MODNAME ": in the module \"%s\" the function \"%s\" was found",
                                  curr_module->module->name, symbol_name);
 
-                        if ((ret = attach_kretprobe_on(symbol_name)) != 0)
-                                ok = 0;
+                        if (attach_kretprobe_on(symbol_name) != 0)
+                                fail = 1;
                 }
         }
 
-        return (ok == 1);
+        return fail;
 }
 
 
@@ -551,7 +571,26 @@ static int __init mlkm_shield_init(void)
  */
 static void __exit mlkm_shield_cleanup(void)
 {
+        struct monitored_module *mm, *tmp_mm;
+        struct module_probe *mp, *tmp_mp;
+
         unregister_kretprobe(&mount_kretprobe);
+
+        list_for_each_entry_safe(mm, tmp_mm, &monitored_modules_list, links) {
+                list_for_each_entry_safe(mp, tmp_mp, &(mm->probes), links) {
+                        pr_debug(KBUILD_MODNAME ": removed the probe to \"%s\" in module \"%s\"",
+                                (mp->probe).kp.symbol_name, mm->module->name);
+
+                        unregister_kretprobe(&(mp->probe));
+                        list_del(&(mp->links));
+                        kfree(mp);
+                }
+
+                pr_debug(KBUILD_MODNAME ": removed \"%s\" from monitored modules", mm->module->name);
+                list_del(&(mm->links));
+                kfree(mm);
+        }
+
         pr_info(KBUILD_MODNAME ": successfully removed");
 }
 
