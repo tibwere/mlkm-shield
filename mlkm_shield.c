@@ -2,8 +2,8 @@
  * @file mlkm_shield.c
  * @brief This is the source file for the MLKM_SHIELD (Malicious Loadable Kernel Module).
  *
- * Taking advantage of the kretprobing mechanism offered by the Linux kernel, several internal kernel
- * functions are hooked (e.g. do_init_module) in order to verify the
+ * Taking advantage of the k[ret]probing mechanism offered by the Linux kernel, several internal kernel
+ * functions are hooked (e.g. do_init_module, delete_module) in order to verify the
  * behavior of the LKMs.
  *
  * If these modify some memory areas judged 'critical' (e.g. sys_call_table, IDT) we proceed with
@@ -24,6 +24,7 @@
 
 /**
  * safe_area - structure representing a good-state cache of memory
+ *
  * @field addr: address of a critical location
  * @field value: value of the critical memory location
  */
@@ -37,6 +38,10 @@ struct safe_area {
  * monitored_module - structure containing some relevant metadata
  * for the management of the monitored modules
  * (e.g. list of probes linked to functions)
+ *
+ * @field module: reference to the structure module
+ * @field links: fields for managing the linked list
+ * @field probes: list of probes linked to the functions defined in the module
  */
 struct monitored_module {
         struct module *module;
@@ -48,6 +53,11 @@ struct monitored_module {
 /**
  * module_probe - structure used to manage the list of probes
  * attached to each function
+ *
+ * @field owner: reference to the module structure in which the function
+ *               to which the probe has been applied is defined
+ * @field probe: kretprobe structure
+ * @field links: fields for managing the linked list
  */
 struct module_probe {
         struct monitored_module *owner;
@@ -104,16 +114,19 @@ static int                                              cache_safe_areas(void);
 static void                                             sync_worker(void *info);
 static void __always_inline                             __write_to_cr0(unsigned long new);
 static void __always_inline                             revert_to_good_state(struct safe_area *a);
+static void                                             remove_malicious_lkm(struct monitored_module *the_module);
 static int                                              verify_safe_areas_mount(struct kretprobe_instance *ri, struct pt_regs *regs);
 static int                                              verify_safe_areas_modfn(struct kretprobe_instance *ri, struct pt_regs *regs);
-static void                                             remove_malicious_lkm(struct monitored_module *the_module);
 static void                                             __verify_safe_areas(struct monitored_module *the_module);
 static void __always_inline                             sync_master(void);
+static int                                              stop_monitoring_module(struct kprobe *kp, struct pt_regs *regs);
 static int                                              start_monitoring_module(struct kretprobe_instance *ri, struct pt_regs *regs);
 static int                                              enable_single_core_execution(struct kretprobe_instance *ri, struct pt_regs *regs);
 static int                                              attach_kretprobe_on(const char *symbol_name);
 static int                                              attach_kretprobe_on_each_symbol(void);
 static struct monitored_module *                        get_monitored_module_from_kretprobe_instance(struct kretprobe_instance *ri);
+static void                                             remove_probes_from(struct monitored_module *mm);
+static void                                             remove_module_from_list(struct monitored_module *mm);
 
 
 /**
@@ -193,7 +206,7 @@ static unsigned long *get_system_call_table_address(void)
 
 
 /**
- * cache_safe_areas - It stores the address and current associated value pairs
+ * cache_safe_areas - It stores the address-associated value pairs
  * in struct safe_areas for subsequent analyzes
  *
  * @return 0 if ok, -E otherwise
@@ -277,6 +290,29 @@ static void __always_inline revert_to_good_state(struct safe_area *a)
 
 
 /**
+ * remove_malicious_lkm - function that takes care of removing the
+ * malicious module and freeing the pre-allocated management memory areas
+ *
+ * @param the_module: module to be removed
+ */
+static void remove_malicious_lkm(struct monitored_module *the_module)
+{
+        free_module_t free_module;
+        struct module *mod;
+
+        mod = the_module->module;
+
+        free_module = get_free_module();
+        if (unlikely(free_module == NULL))
+                pr_warn(KBUILD_MODNAME ": free_module symbol not found so it will be impossibile to remove module if necessary");
+
+        remove_module_from_list(the_module);
+
+        free_module(mod);
+}
+
+
+/**
  * verify_safe_areas_mount - post-handler of the do_init_module function
  * in which __verify_safe_areas is called for the actual verification and
  * the reference to the module currently being assembled is reset
@@ -308,37 +344,6 @@ static int verify_safe_areas_modfn(struct kretprobe_instance *ri, struct pt_regs
 {
         __verify_safe_areas(get_monitored_module_from_kretprobe_instance(ri));
         return 0;
-}
-
-
-/**
- * remove_malicious_lkm - function that takes care of removing the
- * malicious module and freeing the pre-allocated management memory areas
- *
- * @param the_module: module to be removed
- */
-static void remove_malicious_lkm(struct monitored_module *the_module)
-{
-        free_module_t free_module;
-        struct module_probe *curr_mp, *tmp;
-
-        free_module = get_free_module();
-        if (unlikely(free_module == NULL))
-                pr_warn(KBUILD_MODNAME ": free_module symbol not found so it will be impossibile to remove module if necessary");
-
-        list_for_each_entry_safe(curr_mp, tmp, &(the_module->probes), links) {
-                pr_debug(KBUILD_MODNAME ": removed the probe to \"%s\" in module \"%s\"",
-                        (curr_mp->probe).kp.symbol_name, the_module->module->name);
-
-                unregister_kretprobe(&(curr_mp->probe));
-                list_del(&(curr_mp->links));
-                kfree(curr_mp);
-        }
-
-        pr_debug(KBUILD_MODNAME ": removed \"%s\" from monitored modules", the_module->module->name);
-        list_del(&(the_module->links));
-        free_module(the_module->module);
-        kfree(the_module);
 }
 
 
@@ -380,7 +385,6 @@ static void __verify_safe_areas(struct monitored_module *the_module)
 /**
  * __sync_master - function that allows you to request the execution of sync_worker
  * function to the other CPU cores online
- *
  */
 static void __always_inline sync_master(void)
 {
@@ -394,12 +398,43 @@ static void __always_inline sync_master(void)
         pr_debug(KBUILD_MODNAME ": all cores are syncronized");
 }
 
+
+
 /**
- * atom_insmod - pre-handler of the do_init_module function in which the dedicated
+ * stop_monitoring_module - pre-handler of the delete_module function in which
+ * the memory allocated for module management is freed and the previously
+ * attached probes are removed
+ *
+ * @param kp:   not used
+ * @param regs: used to retrieve first parameter
+ *              (in x86_64 convention first parameter is stored in RDI register)
+ * @return:     always 0
+ */
+static int stop_monitoring_module(struct kprobe *kp, struct pt_regs *regs)
+{
+        struct monitored_module *mm, *tmp_mm;
+        const char __user *module_name;
+
+        module_name = (const char __user *)regs->di;
+
+        list_for_each_entry_safe(mm, tmp_mm, &monitored_modules_list, links) {
+                if (likely(strncmp(mm->module->name, module_name, MODULE_NAME_LEN) != 0))
+                        continue;
+
+                remove_module_from_list(mm);
+        }
+
+        return 0;
+}
+
+
+/**
+ * start_monitoring_module - pre-handler of the do_init_module function in which the dedicated
  * monitored_module structure is initialized and 'single core' execution is requested
  *
  * @param ri:   not used
- * @param regs: not used
+ * @param regs: used to retrieve first parameter
+ *              (in x86_64 convention first parameter is stored in RDI register)
  * @return:     always 0
  */
 static int start_monitoring_module(struct kretprobe_instance *ri, struct pt_regs *regs)
@@ -410,10 +445,6 @@ static int start_monitoring_module(struct kretprobe_instance *ri, struct pt_regs
         if (unlikely(the_monitored_module == NULL))
                 return -ENOMEM;
 
-        /*
-         * static noinline int do_init_module(struct module *mod)
-         * in the x86 convention, the first parameter is stored in the RDI register
-         */
         the_monitored_module->module = (struct module *)regs->di;
         INIT_LIST_HEAD(&(the_monitored_module->probes));
 
@@ -452,7 +483,7 @@ static int enable_single_core_execution(struct kretprobe_instance *ri, struct pt
 
 /**
  * attach_kretprobe_on - function used to hook a kretprobe to a specific symbol
- * received as a single parameter
+ * received as parameter
  *
  * @param symbol_name: name of the symbol to be hooked
  * @return 0 if ok, -E otherwise
@@ -533,11 +564,56 @@ static struct monitored_module * get_monitored_module_from_kretprobe_instance(st
 
 
 /**
- * mount_kretprobe - kretprobe to hook to do_init_module
+ * remove_probes_from - function responsible for removing the kretprobes registered
+ * on the functions defined in the module received as a parameter and freeing the
+ * memory areas allocated for management
+ *
+ * @param mm: module from which to remove the kretprobes
  */
-static struct kretprobe mount_kretprobe = {
+static void remove_probes_from(struct monitored_module *mm)
+{
+        struct module_probe *mp, *tmp_mp;
+
+        list_for_each_entry_safe(mp, tmp_mp, &(mm->probes), links) {
+                pr_debug(KBUILD_MODNAME ": removed the probe to \"%s\" in module \"%s\"",
+                        (mp->probe).kp.symbol_name, mm->module->name);
+
+                unregister_kretprobe(&(mp->probe));
+                list_del(&(mp->links));
+                kfree(mp);
+        }
+}
+
+
+/**
+ * remove_module_from_list - function that internally invokes the remove_probes_from
+ * and subsequently also removes the module from the list
+ *
+ * @param mm: module to be removed
+ */
+static void remove_module_from_list(struct monitored_module *mm)
+{
+        remove_probes_from(mm);
+        pr_debug(KBUILD_MODNAME ": removed \"%s\" from monitored modules", mm->module->name);
+        list_del(&(mm->links));
+        kfree(mm);
+}
+
+
+/**
+ * do_init_module_kretprobe - kretprobe to hook to do_init_module
+ */
+static struct kretprobe do_init_module_kretprobe = {
         .entry_handler       = start_monitoring_module,
         .handler             = verify_safe_areas_mount,
+};
+
+/**
+ * delete_module_kretprobe - kretprobe to hook to do_init_module
+ */
+static struct kprobe delete_module_kprobe = {
+        .symbol_name = "delete_module",
+        .pre_handler = stop_monitoring_module
 };
 
 
@@ -554,9 +630,15 @@ static int __init mlkm_shield_init(void)
         if (unlikely(ret != 0))
                 return ret;
 
-        mount_kretprobe.kp.symbol_name = "do_init_module";
-        if (unlikely(register_kretprobe(&mount_kretprobe))) {
+        do_init_module_kretprobe.kp.symbol_name = "do_init_module";
+        if (unlikely(register_kretprobe(&do_init_module_kretprobe))) {
                 pr_info(KBUILD_MODNAME ": impossibile to hook do_init_module function");
+                return -EINVAL;
+        }
+
+        if (unlikely(register_kprobe(&(delete_module_kprobe)))) {
+                unregister_kretprobe(&(do_init_module_kretprobe));
+                pr_info(KBUILD_MODNAME ": impossibile to hook delete_module function");
                 return -EINVAL;
         }
 
@@ -572,23 +654,11 @@ static int __init mlkm_shield_init(void)
 static void __exit mlkm_shield_cleanup(void)
 {
         struct monitored_module *mm, *tmp_mm;
-        struct module_probe *mp, *tmp_mp;
-
-        unregister_kretprobe(&mount_kretprobe);
+        unregister_kretprobe(&do_init_module_kretprobe);
+        unregister_kprobe(&delete_module_kprobe);
 
         list_for_each_entry_safe(mm, tmp_mm, &monitored_modules_list, links) {
-                list_for_each_entry_safe(mp, tmp_mp, &(mm->probes), links) {
-                        pr_debug(KBUILD_MODNAME ": removed the probe to \"%s\" in module \"%s\"",
-                                (mp->probe).kp.symbol_name, mm->module->name);
-
-                        unregister_kretprobe(&(mp->probe));
-                        list_del(&(mp->links));
-                        kfree(mp);
-                }
-
-                pr_debug(KBUILD_MODNAME ": removed \"%s\" from monitored modules", mm->module->name);
-                list_del(&(mm->links));
-                kfree(mm);
+                remove_module_from_list(mm);
         }
 
         pr_info(KBUILD_MODNAME ": successfully removed");
