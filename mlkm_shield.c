@@ -439,13 +439,13 @@ static void __always_inline sync_master(void)
 static int stop_monitoring_module(struct kprobe *kp, struct pt_regs *regs)
 {
         struct monitored_module *mm, *tmp_mm;
-        const char __user *module_name;
+        struct module *the_module;
 
-        module_name = (const char __user *)regs->di;
-        pr_debug(KBUILD_MODNAME ": removing probes from \"%s\" module before remove it", module_name);
+        the_module = (struct module *)regs->di;
+        pr_debug(KBUILD_MODNAME ": removing probes from \"%s\" module before remove it", the_module->name);
 
         list_for_each_entry_safe(mm, tmp_mm, &monitored_modules_list, links) {
-                if (likely(strncmp(mm->module->name, module_name, MODULE_NAME_LEN) != 0))
+                if (likely(strncmp(mm->module->name, the_module->name, MODULE_NAME_LEN) != 0))
                         continue;
 
                 remove_module_from_list(mm);
