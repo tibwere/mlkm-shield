@@ -86,6 +86,18 @@ struct kretprobe_private_data {
 
 
 /**
+ * kallsyms_lookup_name_t - prototype of the kallsyms_lookup_name function
+ * (from kernel version 5.7 no longer exposed)
+ */
+typedef unsigned long (*kallsyms_lookup_name_t)(const char *name);
+
+/**
+ * free_module_t - prototype of the free_module function (not exposed)
+ */
+typedef void (*free_module_t)(struct module *mod);
+
+
+/**
  * monitored_modules_list - head of the list of monitored modules
  */
 static LIST_HEAD(monitored_modules_list);
@@ -114,15 +126,9 @@ static struct monitored_module *curr_module;
 static unsigned long cr0;
 
 /**
- * kallsyms_lookup_name_t - prototype of the kallsyms_lookup_name function
- * (from kernel version 5.7 no longer exposed)
+ * free_module: function pointer of free_module not exposed to LKMs
  */
-typedef unsigned long (*kallsyms_lookup_name_t)(const char *name);
-
-/**
- * free_module_t - prototype of the free_module function (not exposed)
- */
-typedef void (*free_module_t)(struct module *mod);
+static free_module_t free_module;
 
 
 /* Prototypes */
@@ -316,18 +322,10 @@ static void __always_inline revert_to_good_state(struct safe_area *a)
  */
 static void remove_malicious_lkm(struct monitored_module *the_module)
 {
-        free_module_t free_module;
         struct module *mod;
 
         mod = the_module->module;
-
-        free_module = get_free_module();
-        if (unlikely(free_module == NULL))
-                pr_warn(KBUILD_MODNAME ": free_module symbol not found so it will be impossibile to remove module if necessary");
-
         remove_module_from_list(the_module);
-
-        // Since the module has already been removed the pre_handler is practically a nop
         free_module(mod);
 }
 
@@ -671,6 +669,12 @@ static int __init mlkm_shield_init(void)
         ret = cache_safe_areas();
         if (unlikely(ret != 0))
                 return ret;
+
+        free_module = get_free_module();
+        if (unlikely(free_module == NULL)) {
+                pr_info(KBUILD_MODNAME ": free_module symbol not found so it would be impossibile to remove module if necessary -> ABORT");
+                return -EINVAL;
+        }
 
         do_init_module_kretprobe.kp.symbol_name = "do_init_module";
         if (unlikely(register_kretprobe(&do_init_module_kretprobe))) {
