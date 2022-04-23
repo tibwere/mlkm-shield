@@ -16,6 +16,7 @@
 #include <linux/kprobes.h>
 #include <linux/slab.h>
 #include <linux/list.h>
+#include <linux/types.h>
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(5,7,0)
 #define KPROBE_LOOKUP (1)
@@ -25,7 +26,7 @@
 /**
  * safe_area - structure representing a good-state cache of memory
  *
- * @field addr: address of a critical location
+ * @field addr:  address of a critical location
  * @field value: value of the critical memory location
  */
 struct safe_area {
@@ -39,12 +40,14 @@ struct safe_area {
  * for the management of the monitored modules
  * (e.g. list of probes linked to functions)
  *
- * @field module: reference to the structure module
- * @field links: fields for managing the linked list
- * @field probes: list of probes linked to the functions defined in the module
+ * @field module:         reference to the structure module
+ * @field under_analysis: true if someone has started analysis, false otherwise
+ * @field links:          fields for managing the linked list
+ * @field probes:         list of probes linked to the functions defined in the module
  */
 struct monitored_module {
         struct module *module;
+        bool under_analysis;
         struct list_head links;
         struct list_head probes;
 };
@@ -63,6 +66,22 @@ struct module_probe {
         struct monitored_module *owner;
         struct kretprobe probe;
         struct list_head links;
+};
+
+
+/**
+ * kretprobe_private_data - the structure is used to pass data from the
+ * pre to the post handler of a kretprobe. Using the Boolean variable
+ * contained within in combination with the under_analysis field of the
+ * monitored_module structure, it is possible to prevent nested analyzes
+ * from starting
+ *
+ * @field do_verification: true if the function is the outermost,
+ *                         false if it is invoked by another that is
+ *                         already part of a test
+ */
+struct kretprobe_private_data {
+        bool do_verification;
 };
 
 
@@ -117,7 +136,7 @@ static void __always_inline                             revert_to_good_state(str
 static void                                             remove_malicious_lkm(struct monitored_module *the_module);
 static int                                              verify_safe_areas_mount(struct kretprobe_instance *ri, struct pt_regs *regs);
 static int                                              verify_safe_areas_modfn(struct kretprobe_instance *ri, struct pt_regs *regs);
-static void                                             __verify_safe_areas(struct monitored_module *the_module);
+static void                                             __verify_safe_areas(struct monitored_module *the_module, bool need_to_attach);
 static void __always_inline                             sync_master(void);
 static int                                              stop_monitoring_module(struct kprobe *kp, struct pt_regs *regs);
 static int                                              start_monitoring_module(struct kretprobe_instance *ri, struct pt_regs *regs);
@@ -324,7 +343,7 @@ static void remove_malicious_lkm(struct monitored_module *the_module)
  */
 static int verify_safe_areas_mount(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
-        __verify_safe_areas(curr_module);
+        __verify_safe_areas(curr_module, true);
         curr_module = NULL;
 
         return 0;
@@ -343,7 +362,11 @@ static int verify_safe_areas_mount(struct kretprobe_instance *ri, struct pt_regs
  */
 static int verify_safe_areas_modfn(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
-        __verify_safe_areas(get_monitored_module_from_kretprobe_instance(ri));
+        struct kretprobe_private_data *data;
+        data = (struct kretprobe_private_data *)ri->data;
+
+        if (data->do_verification)
+                __verify_safe_areas(get_monitored_module_from_kretprobe_instance(ri), false);
         return 0;
 }
 
@@ -355,7 +378,7 @@ static int verify_safe_areas_modfn(struct kretprobe_instance *ri, struct pt_regs
  *
  * @param the_module: module subjected to verification
  */
-static void __verify_safe_areas(struct monitored_module *the_module)
+static void __verify_safe_areas(struct monitored_module *the_module, bool need_to_attach)
 {
         int i, good;
 
@@ -374,13 +397,15 @@ static void __verify_safe_areas(struct monitored_module *the_module)
                 }
         }
 
-        if (good && attach_kretprobe_on_each_symbol())
+
+        if (good && need_to_attach && attach_kretprobe_on_each_symbol())
                 pr_warn(KBUILD_MODNAME ": some symbol cannot be hooked");
+
+        the_module->under_analysis = false;
+        likely(good == 1) ? pr_info(KBUILD_MODNAME ": no threat detected") : remove_malicious_lkm(the_module);
 
         atomic_set(&sync_leave, 0);
         preempt_enable();
-
-        likely(good == 1) ? pr_info(KBUILD_MODNAME ": no threat detected") : remove_malicious_lkm(the_module);
 }
 
 /**
@@ -452,6 +477,7 @@ static int start_monitoring_module(struct kretprobe_instance *ri, struct pt_regs
 
         list_add(&(the_monitored_module->links), &monitored_modules_list);
         sync_master();
+        the_monitored_module->under_analysis = true;
 
         curr_module = the_monitored_module;
         pr_debug(KBUILD_MODNAME ": module \"%s\" (@ 0x%lx) installation is taking place on CPU core %d",
@@ -473,9 +499,19 @@ static int enable_single_core_execution(struct kretprobe_instance *ri, struct pt
 {
         struct kretprobe *krp;
         struct monitored_module *mm;
+        struct kretprobe_private_data *data;
 
+        data = (struct kretprobe_private_data *)ri->data;
         krp = get_kretprobe(ri);
         mm = get_monitored_module_from_kretprobe_instance(ri);
+
+        if (mm->under_analysis) {
+                data->do_verification = false;
+                return 0;
+        }
+
+        mm->under_analysis = true;
+        data->do_verification = true;
 
         pr_info(KBUILD_MODNAME ": function \"%s\" in module \"%s\" has invoked", krp->kp.symbol_name, mm->module->name);
         sync_master();
@@ -504,6 +540,7 @@ static int attach_kretprobe_on(const char *symbol_name)
         (mp->probe).kp.symbol_name = symbol_name;
         (mp->probe).entry_handler = enable_single_core_execution;
         (mp->probe).handler = verify_safe_areas_modfn;
+        (mp->probe).data_size = sizeof(struct kretprobe_private_data);
 
         if(register_kretprobe(&(mp->probe))) {
                 pr_debug(KBUILD_MODNAME ": impossibile to hook \"%s\" (module: \"%s\")",
@@ -610,6 +647,7 @@ static void remove_module_from_list(struct monitored_module *mm)
 static struct kretprobe do_init_module_kretprobe = {
         .entry_handler       = start_monitoring_module,
         .handler             = verify_safe_areas_mount,
+        .data_size           = sizeof(struct kretprobe_private_data),
 };
 
 /**
