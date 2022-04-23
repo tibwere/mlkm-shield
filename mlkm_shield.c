@@ -463,7 +463,7 @@ static int attach_kretprobe_on(const char *symbol_name)
 
         mp = (struct module_probe *)kzalloc(sizeof(struct module_probe), GFP_KERNEL);
         if (unlikely(mp == NULL)) {
-                pr_debug(KBUILD_MODNAME ": unable to allocate memory for module_probe structure")
+                pr_debug(KBUILD_MODNAME ": unable to allocate memory for module_probe structure");
                 return -ENOMEM;
         }
 
