@@ -3,7 +3,7 @@
  * @brief This is the source file for the MLKM_SHIELD (Malicious Loadable Kernel Module).
  *
  * Taking advantage of the k[ret]probing mechanism offered by the Linux kernel, several internal kernel
- * functions are hooked (e.g. do_init_module, delete_module) in order to verify the
+ * functions are hooked (e.g. do_init_module, free_module) in order to verify the
  * behavior of the LKMs.
  *
  * If these modify some memory areas judged 'critical' (e.g. sys_call_table, IDT) we proceed with
@@ -308,6 +308,7 @@ static void remove_malicious_lkm(struct monitored_module *the_module)
 
         remove_module_from_list(the_module);
 
+        // Since the module has already been removed the pre_handler is practically a nop
         free_module(mod);
 }
 
@@ -401,7 +402,7 @@ static void __always_inline sync_master(void)
 
 
 /**
- * stop_monitoring_module - pre-handler of the delete_module function in which
+ * stop_monitoring_module - pre-handler of the free_module function in which
  * the memory allocated for module management is freed and the previously
  * attached probes are removed
  *
@@ -416,6 +417,7 @@ static int stop_monitoring_module(struct kprobe *kp, struct pt_regs *regs)
         const char __user *module_name;
 
         module_name = (const char __user *)regs->di;
+        pr_debug(KBUILD_MODNAME ": removing probes from \"%s\" module before remove it", module_name);
 
         list_for_each_entry_safe(mm, tmp_mm, &monitored_modules_list, links) {
                 if (likely(strncmp(mm->module->name, module_name, MODULE_NAME_LEN) != 0))
@@ -557,9 +559,11 @@ static int attach_kretprobe_on_each_symbol(void)
 static struct monitored_module * get_monitored_module_from_kretprobe_instance(struct kretprobe_instance *ri)
 {
         struct kretprobe *kp;
+        struct module_probe *mp;
 
         kp = get_kretprobe(ri);
-        return (struct monitored_module *)container_of(kp, struct module_probe, probe);
+        mp = container_of(kp, struct module_probe, probe);
+        return mp->owner;
 }
 
 
@@ -609,10 +613,10 @@ static struct kretprobe do_init_module_kretprobe = {
 };
 
 /**
- * delete_module_kretprobe - kretprobe to hook to do_init_module
+ * free_module_kretprobe - kretprobe to hook to do_init_module
  */
-static struct kprobe delete_module_kprobe = {
-        .symbol_name = "delete_module",
+static struct kprobe free_module_kprobe = {
+        .symbol_name = "free_module",
         .pre_handler = stop_monitoring_module
 };
 
@@ -636,9 +640,9 @@ static int __init mlkm_shield_init(void)
                 return -EINVAL;
         }
 
-        if (unlikely(register_kprobe(&(delete_module_kprobe)))) {
+        if (unlikely(register_kprobe(&(free_module_kprobe)))) {
                 unregister_kretprobe(&(do_init_module_kretprobe));
-                pr_info(KBUILD_MODNAME ": impossibile to hook delete_module function");
+                pr_info(KBUILD_MODNAME ": impossibile to hook free_module function");
                 return -EINVAL;
         }
 
@@ -655,7 +659,7 @@ static void __exit mlkm_shield_cleanup(void)
 {
         struct monitored_module *mm, *tmp_mm;
         unregister_kretprobe(&do_init_module_kretprobe);
-        unregister_kprobe(&delete_module_kprobe);
+        unregister_kprobe(&free_module_kprobe);
 
         list_for_each_entry_safe(mm, tmp_mm, &monitored_modules_list, links) {
                 remove_module_from_list(mm);
