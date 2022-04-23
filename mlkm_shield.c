@@ -396,12 +396,16 @@ static void __verify_safe_areas(struct monitored_module *the_module, bool need_t
         }
 
 
-        if (good && need_to_attach && attach_kretprobe_on_each_symbol())
-                pr_warn(KBUILD_MODNAME ": some symbol cannot be hooked");
+        if (good && need_to_attach && attach_kretprobe_on_each_symbol()) {
+                pr_warn(KBUILD_MODNAME ": some symbol cannot be hooked, so this module cannot be monitored -> BAN");
+                remove_malicious_lkm(the_module);
+                goto out;
+        }
 
         the_module->under_analysis = false;
         likely(good == 1) ? pr_info(KBUILD_MODNAME ": no threat detected") : remove_malicious_lkm(the_module);
 
+out:
         atomic_set(&sync_leave, 0);
         preempt_enable();
 }
@@ -440,7 +444,6 @@ static int stop_monitoring_module(struct kprobe *kp, struct pt_regs *regs)
         struct module *the_module;
 
         the_module = (struct module *)regs->di;
-        pr_debug(KBUILD_MODNAME ": removing probes from \"%s\" module before remove it", the_module->name);
 
         list_for_each_entry_safe(mm, tmp_mm, &monitored_modules_list, links) {
                 if (likely(strncmp(mm->module->name, the_module->name, MODULE_NAME_LEN) != 0))
