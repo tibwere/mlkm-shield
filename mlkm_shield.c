@@ -17,6 +17,10 @@
 #include <linux/slab.h>
 #include <linux/list.h>
 #include <linux/types.h>
+#include <asm/segment.h>
+#include <asm/desc_defs.h>
+
+#include "config.h"
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(5,7,0)
 #define KPROBE_LOOKUP (1)
@@ -32,7 +36,7 @@
 struct safe_area {
         unsigned long *addr;
         unsigned long value;
-} areas[NR_syscalls];
+} *areas;
 
 
 /**
@@ -133,8 +137,9 @@ static free_module_t free_module;
 
 /* Prototypes */
 static kallsyms_lookup_name_t                           __get_kallsyms_lookup_name(void);
-static free_module_t                                    get_free_module(void);
+static unsigned long __always_inline                    lookup(const char *name);
 static unsigned long *                                  get_system_call_table_address(void);
+static void __always_inline                             __cache_single_ulong(int index, unsigned long *addr);
 static int                                              cache_safe_areas(void);
 static void                                             sync_worker(void *info);
 static void __always_inline                             __write_to_cr0(unsigned long new);
@@ -152,6 +157,7 @@ static int                                              attach_kretprobe_on_each
 static struct monitored_module *                        get_monitored_module_from_kretprobe_instance(struct kretprobe_instance *ri);
 static void                                             remove_probes_from(struct monitored_module *mm);
 static void                                             remove_module_from_list(struct monitored_module *mm);
+static size_t                                           safe_areas_length(void);
 
 
 /**
@@ -179,20 +185,21 @@ static kallsyms_lookup_name_t __get_kallsyms_lookup_name(void)
 
 
 /**
- * get_free_module - helper function for retrieving the address where the
- * free_module function is present in memory
+ * lookup - as the name implies, it looks for the address associated
+ * with a certain symbol in a differentiated way according to the
+ * kernel version
  *
- * @return function pointer (free_module_t type)
+ * @param name: name of the symbol
+ * @return      address of the symbol
  */
-static free_module_t get_free_module(void)
+static unsigned long __always_inline lookup(const char *name)
 {
-#if KPROBE_LOOKUP
-        kallsyms_lookup_name_t kallsyms_lookup_name = __get_kallsyms_lookup_name();
+#ifdef KPROBE_LOOKUP
+	kallsyms_lookup_name_t kallsyms_lookup_name = __get_kallsyms_lookup_name();
         if (unlikely(kallsyms_lookup_name == NULL))
-                return NULL;
+                return 0;
 #endif
-
-        return (free_module_t)kallsyms_lookup_name("free_module");
+        return kallsyms_lookup_name(name);
 }
 
 
@@ -205,17 +212,10 @@ static free_module_t get_free_module(void)
  */
 static unsigned long *get_system_call_table_address(void)
 {
-        unsigned long *addr;
-
 #if LINUX_VERSION_CODE > KERNEL_VERSION(4,4,0)
-#ifdef KPROBE_LOOKUP
-	kallsyms_lookup_name_t kallsyms_lookup_name = __get_kallsyms_lookup_name();
-        if (unlikely(kallsyms_lookup_name == NULL))
-                return NULL;
-#endif
-        addr = (unsigned long *)kallsyms_lookup_name("sys_call_table");
-        return addr;
+        return (unsigned long *)lookup("sys_call_table");
 #else
+        unsigned long *addr;
 	unsigned long int i;
 
 	for (i = (unsigned long int)sys_close; i < ULONG_MAX;
@@ -231,6 +231,21 @@ static unsigned long *get_system_call_table_address(void)
 
 
 /**
+ * __cache_single_ulong - function that stores the status of a single memory location
+ * by doing debug audits too
+ *
+ * @param index: index of areas array
+ * @addr:        address to save
+ */
+static void __always_inline __cache_single_ulong(int index, unsigned long *addr)
+{
+        areas[index].addr = addr;
+        areas[index].value = *addr;
+        pr_debug(KBUILD_MODNAME ": address 0x%lx -> value 0x%lx", (unsigned long)addr, *addr);
+}
+
+
+/**
  * cache_safe_areas - It stores the address-associated value pairs
  * in struct safe_areas for subsequent analyzes
  *
@@ -238,19 +253,28 @@ static unsigned long *get_system_call_table_address(void)
  */
 static int cache_safe_areas(void)
 {
-        int i;
-        unsigned long *system_call_table = get_system_call_table_address();
+        int i, j, k;
+        unsigned long *addr;
+#ifdef PROTECT_SYS_CALL_TABLE
+        unsigned long *system_call_table;
+#endif
+
+        i = j = k = 0;
+
+#ifdef PROTECT_SYS_CALL_TABLE
+        system_call_table = get_system_call_table_address();
         if (unlikely(system_call_table == NULL))
                 return -ENOMEM;
 
         pr_debug(KBUILD_MODNAME ": system call table address is 0x%lx", (unsigned long)system_call_table);
 
-        for (i = 0; i < NR_syscalls; ++i) {
-                areas[i].addr = &(system_call_table[i]);
-                areas[i].value = system_call_table[i];
-                pr_debug(KBUILD_MODNAME ": address 0x%lx -> value 0x%lx",
-                        (unsigned long)&(system_call_table[i]),
-                        system_call_table[i]);
+        for (; i < NR_syscalls; ++i)
+                __cache_single_ulong(i, &(system_call_table[i]));
+#endif
+
+        for (; SAFE_SYMBOLS[k] != NULL; ++k) {
+                addr = (unsigned long *)lookup(SAFE_SYMBOLS[i]);
+                __cache_single_ulong(i + j + k, addr);
         }
 
         return 0;
@@ -643,6 +667,31 @@ static void remove_module_from_list(struct monitored_module *mm)
 
 
 /**
+ * safe_areas_length - evaluates the length of the array of
+ * memory areas to be protected
+ *
+ * @return length of array (as dwords)
+ */
+static size_t safe_areas_length(void)
+{
+        int i;
+        size_t length = 0;
+#ifdef PROTECT_SYS_CALL_TABLE
+        length += NR_syscalls;
+#endif
+
+#ifdef PROTECT_IDT
+        length += (IDT_ENTRIES * sizeof(gate_desc) / sizeof(unsigned long));
+#endif
+
+        for (i=0; SAFE_SYMBOLS[i] != NULL; ++i);
+        length += i;
+
+        return length;
+}
+
+
+/**
  * do_init_module_kretprobe - kretprobe to hook to do_init_module
  */
 static struct kretprobe do_init_module_kretprobe = {
@@ -669,11 +718,13 @@ static int __init mlkm_shield_init(void)
 
         cr0 = read_cr0();
 
+        areas = (struct safe_area *)kzalloc(safe_areas_length() * sizeof(struct safe_area), GFP_KERNEL);
+
         ret = cache_safe_areas();
         if (unlikely(ret != 0))
                 return ret;
 
-        free_module = get_free_module();
+        free_module = (free_module_t)lookup("free_module");
         if (unlikely(free_module == NULL)) {
                 pr_info(KBUILD_MODNAME ": free_module symbol not found so it would be impossibile to remove module if necessary -> ABORT");
                 return -EINVAL;
@@ -709,6 +760,8 @@ static void __exit mlkm_shield_cleanup(void)
         list_for_each_entry_safe(mm, tmp_mm, &monitored_modules_list, links) {
                 remove_module_from_list(mm);
         }
+
+        kfree(areas);
 
         pr_info(KBUILD_MODNAME ": successfully removed");
 }
