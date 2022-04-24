@@ -22,11 +22,7 @@
 
 #include "config.h"
 #include "asm/x86.h"
-
-#if LINUX_VERSION_CODE > KERNEL_VERSION(5,7,0)
-#define KPROBE_LOOKUP (1)
-#endif
-
+#include "symbols.h"
 
 /**
  * safe_area - structure representing a good-state cache of memory
@@ -91,18 +87,6 @@ struct kretprobe_private_data {
 
 
 /**
- * kallsyms_lookup_name_t - prototype of the kallsyms_lookup_name function
- * (from kernel version 5.7 no longer exposed)
- */
-typedef unsigned long (*kallsyms_lookup_name_t)(const char *name);
-
-/**
- * free_module_t - prototype of the free_module function (not exposed)
- */
-typedef void (*free_module_t)(struct module *mod);
-
-
-/**
  * monitored_modules_list - head of the list of monitored modules
  */
 static LIST_HEAD(monitored_modules_list);
@@ -131,9 +115,6 @@ static free_module_t free_module;
 
 
 /* Prototypes */
-static kallsyms_lookup_name_t                           __get_kallsyms_lookup_name(void);
-static unsigned long __always_inline                    lookup(const char *name);
-static unsigned long *                                  get_system_call_table_address(void);
 static void __always_inline                             __cache_single_ulong(int index, unsigned long *addr);
 static int                                              cache_safe_areas(void);
 static void                                             sync_worker(void *info);
@@ -152,76 +133,6 @@ static struct monitored_module *                        get_monitored_module_fro
 static void                                             remove_probes_from(struct monitored_module *mm);
 static void                                             remove_module_from_list(struct monitored_module *mm);
 static size_t                                           safe_areas_length(void);
-
-
-/**
- * __get_kallsyms_lookup_name - helper function for retrieving the address where the
- * kallsyms_lookup_name function is present in memory
- *
- * @return function pointer (kallsyms_lookup_name_t type)
- */
-static kallsyms_lookup_name_t __get_kallsyms_lookup_name(void)
-{
-        struct kprobe kp = {
-                .symbol_name = "kallsyms_lookup_name"
-        };
-	kallsyms_lookup_name_t symb;
-
-        if (likely(!register_kprobe(&kp))) {
-	        symb = (kallsyms_lookup_name_t) kp.addr;
-	        unregister_kprobe(&kp);
-
-                return (kallsyms_lookup_name_t)symb;
-        }
-
-        return NULL;
-}
-
-
-/**
- * lookup - as the name implies, it looks for the address associated
- * with a certain symbol in a differentiated way according to the
- * kernel version
- *
- * @param name: name of the symbol
- * @return      address of the symbol
- */
-static unsigned long __always_inline lookup(const char *name)
-{
-#ifdef KPROBE_LOOKUP
-	kallsyms_lookup_name_t kallsyms_lookup_name = __get_kallsyms_lookup_name();
-        if (unlikely(kallsyms_lookup_name == NULL))
-                return 0;
-#endif
-        return kallsyms_lookup_name(name);
-}
-
-
-/**
- * get_system_call_table_addres - function that allows to obtain the logical
- * address of the system call table in a differentiated way according to
- * the current version of the kernel
- *
- * @return sys_call_table address
- */
-static unsigned long *get_system_call_table_address(void)
-{
-#if LINUX_VERSION_CODE > KERNEL_VERSION(4,4,0)
-        return (unsigned long *)lookup("sys_call_table");
-#else
-        unsigned long *addr;
-	unsigned long int i;
-
-	for (i = (unsigned long int)sys_close; i < ULONG_MAX;
-			i += sizeof(void *)) {
-		addr = (unsigned long *)i;
-
-		if (addr[__NR_close] == (unsigned long)sys_close)
-			return addr;
-	}
-	return NULL;
-#endif
-}
 
 
 /**
@@ -267,7 +178,7 @@ static int cache_safe_areas(void)
 #endif
 
         for (; SAFE_SYMBOLS[k] != NULL; ++k) {
-                addr = (unsigned long *)lookup(SAFE_SYMBOLS[i]);
+                addr = (unsigned long *)symbol_lookup(SAFE_SYMBOLS[i]);
                 __cache_single_ulong(i + j + k, addr);
         }
 
@@ -706,7 +617,7 @@ static int __init mlkm_shield_init(void)
         if (unlikely(ret != 0))
                 return ret;
 
-        free_module = (free_module_t)lookup("free_module");
+        free_module = (free_module_t)symbol_lookup("free_module");
         if (unlikely(free_module == NULL)) {
                 pr_info(KBUILD_MODNAME ": free_module symbol not found so it would be impossibile to remove module if necessary -> ABORT");
                 return -EINVAL;
