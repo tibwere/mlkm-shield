@@ -2,6 +2,7 @@ obj-m                := mlkm_shield.o
 mlkm_shield-objs     := symbols.o module.o
 CFLAGS_mlkm_shield.o := -DDEBUG
 EXTRA_CFLAGS         := -I$(PWD)/include
+src                  := $(PWD)/src
 
 CC   = gcc -Wall
 KDIR = /lib/modules/$(shell uname -r)/build
