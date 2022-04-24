@@ -21,6 +21,7 @@
 #include <asm/desc_defs.h>
 
 #include "config.h"
+#include "x86.h"
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(5,7,0)
 #define KPROBE_LOOKUP (1)
@@ -124,12 +125,6 @@ static atomic_t sync_leave __attribute__((aligned(64)));
 static struct monitored_module *curr_module;
 
 /**
- * cr0 - cached value of CR0 register
- * (used to unprotect/protect memory mechanism)
- */
-static unsigned long cr0;
-
-/**
  * free_module: function pointer of free_module not exposed to LKMs
  */
 static free_module_t free_module;
@@ -142,7 +137,6 @@ static unsigned long *                                  get_system_call_table_ad
 static void __always_inline                             __cache_single_ulong(int index, unsigned long *addr);
 static int                                              cache_safe_areas(void);
 static void                                             sync_worker(void *info);
-static void __always_inline                             __write_to_cr0(unsigned long new);
 static void __always_inline                             revert_to_good_state(struct safe_area *a);
 static void                                             remove_malicious_lkm(struct monitored_module *the_module);
 static int                                              verify_safe_areas_mount(struct kretprobe_instance *ri, struct pt_regs *regs);
@@ -301,25 +295,6 @@ static void sync_worker(void *info)
 
         pr_debug(KBUILD_MODNAME ": core %d resumes work left earlier", cpuid);
 }
-
-
-/**
- * __write_to_cr0 - function that uses inline ASM to overwrite the CR0 register
- *
- * @param new: new value to store in CR0 register
- */
-static void __always_inline __write_to_cr0(unsigned long new)
-{
-        /* See https://elixir.bootlin.com/linux/v5.17.3/source/arch/x86/include/asm/special_insns.h#L54 */
-        asm volatile("mov %0,%%cr0": : "r" (new) : "memory");
-}
-
-/**
- * These macros allow you to delimit a portion of code that can be accessed
- * in an arbitrary way both on registers and in memory (thanks to the overwriting of cr0)
- */
-#define START_UNPROTECTED_EDITING __write_to_cr0(cr0 & ~0x00010000)
-#define END_UNPROTECTED_EDITING   __write_to_cr0(cr0)
 
 
 /**
