@@ -636,6 +636,13 @@ static void remove_module_from_list(struct monitored_module *mm)
 {
         remove_probes_from(mm);
         pr_debug(KBUILD_MODNAME ": removed \"%s\" from monitored modules", mm->module->name);
+
+        /*
+         * If a rootkit eliminates itself from the module list by invoking free_module(),
+         * a segmentation fault is obtained as described in the documentation linked below:
+         *
+         * https://elixir.bootlin.com/linux/v5.17/source/include/linux/poison.h#L23
+         */
         list_del(&(mm->links));
         kfree(mm);
 }
