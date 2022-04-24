@@ -26,7 +26,7 @@ const char *SAFE_SYMBOLS[] = {
  * MOMDULE_WHITE_LIST - null terminated list of LKM not to
  * be analyzed because they are considered 'good' a priori
  */
-const char *MOMDULE_WHITE_LIST[] = {
+const char *MODULE_WHITE_LIST[] = {
         NULL,
 };
 
