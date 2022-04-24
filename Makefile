@@ -1,9 +1,11 @@
-obj-m := mlkm_shield.o
+obj-m                := mlkm_shield.o
 CFLAGS_mlkm_shield.o := -DDEBUG
+EXTRA_CFLAGS         := -I$(PWD)/include
 
+CC   = gcc -Wall
 KDIR = /lib/modules/$(shell uname -r)/build
 PWD  = $(shell pwd)
-MODN  = mlkm_shield
+MODN = mlkm_shield
 MNTD = $(shell /usr/bin/lsmod | /usr/bin/grep $(MODN))
 
 build:
