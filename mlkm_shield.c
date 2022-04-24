@@ -21,7 +21,7 @@
 #include <asm/desc_defs.h>
 
 #include "config.h"
-#include "x86.h"
+#include "asm/x86.h"
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(5,7,0)
 #define KPROBE_LOOKUP (1)
