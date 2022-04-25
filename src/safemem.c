@@ -1,5 +1,6 @@
 #include <asm/unistd.h>
 #include <linux/printk.h>
+#include <linux/types.h>
 
 #include "safemem.h"
 #include "config.h"
@@ -9,59 +10,56 @@
 #include "shield.h"
 #include "symbols.h"
 
-
-struct safe_area *areas;
-size_t num_areas;
+struct safe_area *areas[NUM_AREAS];
+size_t num_additional_symbols;
 
 
 /**
- * __cache_single_ulong - function that stores the status of a single memory location
+ * cache_single_ulong - function that stores the status of a single memory location
  * by doing debug audits too
  *
  * @param index: index of areas array
  * @addr:        address to save
  */
-static inline void cache_single_ulong(int index, unsigned long *addr)
+static inline void cache_single_ulong(struct safe_area *sa, int index, unsigned long *addr)
 {
-        areas[index].addr = addr;
-        areas[index].value = *addr;
+        sa[index].addr = addr;
+        sa[index].value = *addr;
         pr_debug(KBUILD_MODNAME ": address 0x%lx -> value 0x%lx", (unsigned long)addr, *addr);
 }
 
-/**
- * cache_safe_areas - It stores the address-associated value pairs
- * in struct safe_areas for subsequent analyzes
- *
- * @return 0 if ok, -E otherwise
- */
-int cache_safe_areas(void)
+int cache_mem_area(const char *audit, unsigned long *start_address, int length, int index)
 {
-        int i, j, k;
-        unsigned long *addr;
-#ifdef PROTECT_SYS_CALL_TABLE
-        unsigned long *system_call_table;
-#endif
+        int i;
 
-        i = j = k = 0;
-
-#ifdef PROTECT_SYS_CALL_TABLE
-        system_call_table = get_system_call_table_address();
-        if (unlikely(system_call_table == NULL))
+        if (unlikely(start_address == NULL))
                 return -ENOMEM;
 
-        pr_debug(KBUILD_MODNAME ": system call table address is 0x%lx", (unsigned long)system_call_table);
+        pr_debug(KBUILD_MODNAME ": %s address is 0x%lx", audit, (unsigned long)start_address);
 
-        for (; i < NR_syscalls; ++i) {
-                cache_single_ulong(i, &(system_call_table[i]));
-        }
-#endif
-
-        for (; SAFE_SYMBOLS[k] != NULL; ++k) {
-                addr = (unsigned long *)symbol_lookup(SAFE_SYMBOLS[k]);
-                cache_single_ulong(i + j + k, addr);
-        }
+        for (i=0; i<length; ++i)
+                cache_single_ulong(areas[index], i, &(start_address[i]));
 
         return 0;
+}
+
+
+void cache_additional_symbols_mem_area(void)
+{
+        unsigned long *addr;
+        int i, invalid;
+
+        invalid = 0;
+
+        for(i = 0; i < num_additional_symbols; ++i) {
+                addr = (unsigned long *)symbol_lookup(SAFE_SYMBOLS[i]);
+                if (addr == NULL) {
+                        ++invalid;
+                        continue;
+                }
+
+                cache_single_ulong(areas[SA_ADDITIONAL_SYMBOLS_IDX], i - invalid, addr);
+        }
 }
 
 
@@ -81,6 +79,28 @@ inline void revert_to_good_state(struct safe_area *a)
 }
 
 
+static bool inspect_sa(struct safe_area *sa, int length)
+{
+        int i;
+        if (sa == NULL)
+                return true;
+
+        for (i = 0; i < length; ++i) {
+                if (*(sa[i].addr) != sa[i].value) {
+                        pr_alert(KBUILD_MODNAME ": rootkit detected [memory at 0x%lx has changed (previous: 0x%lx, current: 0x%lx)]",
+                                (unsigned long)sa[i].addr,
+                                sa[i].value,
+                                *(sa[i].addr));
+                        revert_to_good_state(&(sa[i]));
+
+                        return false;
+                }
+        }
+
+        return true;
+}
+
+
 /**
  * verify_safe_areas - core function invoked by the various post-handlers
  * in which the status of the memory areas to be protected is checked and,
@@ -90,57 +110,35 @@ inline void revert_to_good_state(struct safe_area *a)
  */
 void verify_safe_areas(struct monitored_module *the_module, bool need_to_attach)
 {
-        int i, good;
+        int i;
+        bool good = true;
+        int lengths[] = {
+                NR_syscalls,
+                IDT_ULONG_COUNT,
+                num_additional_symbols,
+        };
 
-        /* Assume initially that module is not malicious */
-        good = 1;
-
-        pr_info(KBUILD_MODNAME ": start analysis");
-        for (i = 0; i < NR_syscalls; ++i) {
-                if (*(areas[i].addr) != areas[i].value) {
-                        pr_alert(KBUILD_MODNAME ": rootkit detected [memory at 0x%lx has changed (previous: 0x%lx, current: 0x%lx)]",
-                                (unsigned long)areas[i].addr,
-                                areas[i].value,
-                                *(areas[i].addr));
-                        good = 0;
-                        revert_to_good_state(&(areas[i]));
-                }
+        for (i = 0; i < 3 && good; ++i) {
+                if (inspect_sa(areas[i], lengths[i]))
+                        good = false;
         }
-
 
         if (good && need_to_attach && attach_kretprobe_on_each_symbol()) {
                 pr_warn(KBUILD_MODNAME ": some symbol cannot be hooked, so this module cannot be monitored -> BAN");
                 remove_malicious_lkm(the_module);
         } else {
                 the_module->under_analysis = false;
-                likely(good == 1) ? pr_info(KBUILD_MODNAME ": no threat detected") : remove_malicious_lkm(the_module);
+                likely(good) ? pr_info(KBUILD_MODNAME ": no threat detected") : remove_malicious_lkm(the_module);
         }
 
         atomic_set(&sync_leave, 0);
         preempt_enable();
 }
 
-
-/**
- * safe_areas_length - evaluates the length of the array of
- * memory areas to be protected
- *
- * @return length of array (as dwords)
- */
-size_t safe_areas_length(void)
+inline size_t count_additional_symbols(void)
 {
         int i;
-        size_t length = 0;
-#ifdef PROTECT_SYS_CALL_TABLE
-        length += NR_syscalls;
-#endif
+        for (i = 0; SAFE_SYMBOLS[i] != NULL; ++i);
 
-#ifdef PROTECT_IDT
-        length += (IDT_ENTRIES * sizeof(gate_desc) / sizeof(unsigned long));
-#endif
-
-        for (i=0; SAFE_SYMBOLS[i] != NULL; ++i);
-        length += i;
-
-        return length;
+        return i;
 }

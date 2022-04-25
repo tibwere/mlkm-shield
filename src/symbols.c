@@ -1,5 +1,6 @@
 #include <linux/kprobes.h>
 #include <linux/version.h>
+#include <asm/desc.h>
 
 #include "symbols.h"
 
@@ -78,4 +79,11 @@ unsigned long *get_system_call_table_address(void)
 #endif
 }
 
+unsigned long *get_idt_address(void)
+{
+        struct desc_ptr idtr;
+        memset(&idtr, 0x0, sizeof(struct desc_ptr));
+        store_idt(&idtr);
 
+        return (unsigned long *)idtr.address;
+}

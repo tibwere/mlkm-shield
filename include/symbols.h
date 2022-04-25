@@ -3,6 +3,8 @@
 
 #include <linux/module.h>
 
+#define IDT_ULONG_COUNT (IDT_ENTRIES * sizeof(gate_desc) / sizeof(unsigned long))
+
 /**
  * kallsyms_lookup_name_t - prototype of the kallsyms_lookup_name function
  * (from kernel version 5.7 no longer exposed)
@@ -18,6 +20,7 @@ typedef void (*free_module_t)(struct module *mod);
 /* Prototypes */
 inline unsigned long symbol_lookup(const char *name);
 unsigned long *      get_system_call_table_address(void);
+unsigned long *      get_idt_address(void);
 
 
 #endif // !_MLKM_SHIELD_SYMBOLS_H

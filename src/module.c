@@ -15,10 +15,66 @@
 #include <linux/kprobes.h>
 #include <linux/list.h>
 #include <linux/slab.h>
-
 #include "asm/x86.h"
 #include "safemem.h"
 #include "hooks.h"
+#include "config.h"
+
+
+static int initialize_memory_protection(void)
+{
+        if (PROTECT_SYS_CALL_TABLE) {
+                areas[SA_SYS_CALL_TABLE_IDX] = (struct safe_area *)kmalloc(NR_syscalls * sizeof(struct safe_area), GFP_KERNEL);
+                if (unlikely(areas[SA_SYS_CALL_TABLE_IDX] == NULL)) {
+                        pr_info(KBUILD_MODNAME ": unable to allocate memory for sys_call_table protection -> ABORT");
+                        return -ENOMEM;
+                }
+
+                if(unlikely(cache_sys_call_table_mem_area())) {
+                        pr_info(KBUILD_MODNAME ": unable to cache valid state of memory for sys_call_table -> ABORT");
+                        kfree(areas[SA_SYS_CALL_TABLE_IDX]);
+                        return -ENOMEM;
+                }
+        }
+
+        if (PROTECT_IDT) {
+                areas[SA_IDT_IDX] = (struct safe_area *)kmalloc(IDT_ULONG_COUNT * sizeof(struct safe_area), GFP_KERNEL);
+                if (unlikely(areas[SA_IDT_IDX] == NULL)) {
+                        pr_info(KBUILD_MODNAME ": unable to allocate memory for IDT protection -> ABORT");
+                        if (areas[SA_SYS_CALL_TABLE_IDX] != NULL)
+                                kfree(areas[SA_SYS_CALL_TABLE_IDX]);
+
+                        return -ENOMEM;
+                }
+
+                if(unlikely(cache_idt_mem_area())) {
+                        pr_info(KBUILD_MODNAME ": unable to cache valid state of memory for IDT -> ABORT");
+                        if (areas[SA_SYS_CALL_TABLE_IDX] != NULL)
+                                kfree(areas[SA_SYS_CALL_TABLE_IDX]);
+
+                        kfree(areas[SA_IDT_IDX]);
+
+                        return -ENOMEM;
+                }
+        }
+
+        num_additional_symbols = count_additional_symbols();
+        areas[SA_ADDITIONAL_SYMBOLS_IDX] = (struct safe_area *)kmalloc(num_additional_symbols * sizeof(struct safe_area), GFP_KERNEL);
+        if (unlikely(areas[SA_ADDITIONAL_SYMBOLS_IDX] == NULL)) {
+                pr_info(KBUILD_MODNAME ": unable to allocate memory for additional symbols protection -> ABORT");
+                if (areas[SA_SYS_CALL_TABLE_IDX] != NULL)
+                        kfree(areas[SA_SYS_CALL_TABLE_IDX]);
+
+                if (areas[SA_IDT_IDX] != NULL)
+                        kfree(areas[SA_IDT_IDX]);
+
+                return -ENOMEM;
+        }
+
+        cache_additional_symbols_mem_area();
+
+        return 0;
+}
 
 
 /**
@@ -26,15 +82,9 @@
  */
 static int __init mlkm_shield_init(void)
 {
-        int ret;
-
         cr0 = read_cr0();
-        num_areas = safe_areas_length();
-        areas = (struct safe_area *)kzalloc(num_areas * sizeof(struct safe_area), GFP_KERNEL);
-
-        ret = cache_safe_areas();
-        if (unlikely(ret != 0))
-                return ret;
+        if (initialize_memory_protection())
+                return -ENOMEM;
 
         free_module = (free_module_t)symbol_lookup("free_module");
         if (unlikely(free_module == NULL)) {
@@ -65,6 +115,7 @@ static int __init mlkm_shield_init(void)
  */
 static void __exit mlkm_shield_cleanup(void)
 {
+        int i;
         struct monitored_module *mm, *tmp_mm;
         unregister_kretprobe(&do_init_module_kretprobe);
         unregister_kprobe(&free_module_kprobe);
@@ -73,7 +124,10 @@ static void __exit mlkm_shield_cleanup(void)
                 remove_module_from_list(mm);
         }
 
-        kfree(areas);
+        for (i = 0; i < 3; ++i) {
+                if (areas[i] != NULL)
+                        kfree(areas[i]);
+        }
 
         pr_info(KBUILD_MODNAME ": successfully removed");
 }
