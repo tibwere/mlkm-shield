@@ -60,6 +60,8 @@ void cache_additional_symbols_mem_area(void)
 
                 cache_single_ulong(areas[SA_ADDITIONAL_SYMBOLS_IDX], i - invalid, addr);
         }
+
+        num_additional_symbols -= invalid;
 }
 
 
