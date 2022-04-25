@@ -12,6 +12,8 @@
  * @author Simone Tiberi
  */
 #include <linux/module.h>
+#include <linux/kprobes.h>
+#include <linux/list.h>
 #include <linux/slab.h>
 
 #include "asm/x86.h"

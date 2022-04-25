@@ -1,10 +1,8 @@
-#include <uapi/asm/ptrace.h>
 #include <linux/kprobes.h>
 #include <linux/module.h>
 #include <linux/list.h>
 #include <linux/string.h>
 #include <linux/slab.h>
-#include <asm-generic/module.h>
 
 #include "hooks.h"
 #include "safemem.h"
