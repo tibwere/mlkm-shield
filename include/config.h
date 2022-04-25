@@ -1,5 +1,5 @@
-#ifndef __H_MLKM_SHIELD_CONFIG__
-#define __H_MLKM_SHIELD_CONFIG__
+#ifndef _MLKM_SHIELD_CONFIG_H
+#define _MLKM_SHIELD_CONFIG_H
 
 /**
  * comment/uncomment to disable/enable protection for the
@@ -38,4 +38,4 @@ const char *INITIAL_BLACK_LIST[] = {
         NULL,
 };
 
-#endif // !__H_MLKM_SHIELD_CONFIG__
+#endif // !_MLKM_SHIELD_CONFIG_H

@@ -1,8 +1,8 @@
 obj-m                := mlkm_shield.o
-mlkm_shield-objs     := symbols.o module.o
-CFLAGS_mlkm_shield.o := -DDEBUG
-EXTRA_CFLAGS         := -I$(PWD)/include
+mlkm_shield-objs     := hooks.o module.o safemem.o shield.o symbols.o syncro.o x86.o
+EXTRA_CFLAGS         := -DDEBUG -I$(PWD)/include
 src                  := $(PWD)/src
+obj                  := $(PWD)/obj
 
 CC   = gcc -Wall
 KDIR = /lib/modules/$(shell uname -r)/build

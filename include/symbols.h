@@ -1,6 +1,7 @@
-#ifndef __H_MLKM_SHIELD_SYMBOLS__
-#define __H_MLKM_SHIELD_SYMBOLS__
+#ifndef _MLKM_SHIELD_SYMBOLS_H
+#define _MLKM_SHIELD_SYMBOLS_H
 
+#include <linux/module.h>
 
 /**
  * kallsyms_lookup_name_t - prototype of the kallsyms_lookup_name function
@@ -19,4 +20,4 @@ inline unsigned long symbol_lookup(const char *name);
 unsigned long *      get_system_call_table_address(void);
 
 
-#endif // !__H_MLKM_SHIELD_SYMBOLS__
+#endif // !_MLKM_SHIELD_SYMBOLS_H
