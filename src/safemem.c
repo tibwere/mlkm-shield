@@ -51,12 +51,13 @@ int cache_safe_areas(void)
 
         pr_debug(KBUILD_MODNAME ": system call table address is 0x%lx", (unsigned long)system_call_table);
 
-        for (; i < NR_syscalls; ++i)
+        for (; i < NR_syscalls; ++i) {
                 cache_single_ulong(i, &(system_call_table[i]));
+        }
 #endif
 
         for (; SAFE_SYMBOLS[k] != NULL; ++k) {
-                addr = (unsigned long *)symbol_lookup(SAFE_SYMBOLS[i]);
+                addr = (unsigned long *)symbol_lookup(SAFE_SYMBOLS[k]);
                 cache_single_ulong(i + j + k, addr);
         }
 
