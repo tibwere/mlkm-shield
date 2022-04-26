@@ -121,7 +121,7 @@ void verify_safe_areas(struct monitored_module *the_module, bool need_to_attach)
         };
 
         for (i = 0; i < 3 && good; ++i) {
-                if (inspect_sa(areas[i], lengths[i]))
+                if (!inspect_sa(areas[i], lengths[i]))
                         good = false;
         }
 
