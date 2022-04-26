@@ -92,7 +92,7 @@ void cache_additional_symbols_mem_area(void)
 
         for(i = 0; i < num_additional_symbols; ++i) {
                 addr = (unsigned long *)symbol_lookup(SAFE_SYMBOLS[i]);
-                pr_debug(KBUILD_MODNAME ": symbol \"%s\" address is 0x%lx", SAFE_SYMBOLS[i], addr);
+                pr_debug(KBUILD_MODNAME ": symbol \"%s\" address is 0x%lx", SAFE_SYMBOLS[i], (unsigned long)addr);
                 if (addr == NULL) {
                         pr_debug(KBUILD_MODNAME ": symbol \"%s\" not found, SKIP", SAFE_SYMBOLS[i]);
                         ++invalid;

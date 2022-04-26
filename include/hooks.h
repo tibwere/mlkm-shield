@@ -5,8 +5,8 @@
 
 
 /**
- * kretprobe_private_data - the structure is used to pass data from the
- * pre to the post handler of a kretprobe. Using the Boolean variable
+ * kretprobe_private_data_fn - the structure is used to pass data from
+ * the pre to the post handler of a kretprobe. Using the Boolean variable
  * contained within in combination with the under_analysis member of the
  * monitored_module structure, it is possible to prevent nested analyzes
  * from starting
@@ -15,8 +15,13 @@
  *                         false if it is invoked by another that is
  *                         already part of a test
  */
-struct kretprobe_private_data {
+struct kretprobe_private_data_fn {
         bool do_verification;
+};
+
+struct kretprobe_private_data_ins {
+        bool remove_anyway;
+        struct module *module_to_be_removed;
 };
 
 /* Variables declaration */
