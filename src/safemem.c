@@ -1,3 +1,16 @@
+/**
+ * @file safemem.c
+ * @brief File containing memory management routines (e.g. caching, verification)
+ *
+ * mlkm_shield - Taking advantage of the k[ret]probing mechanism offered by the Linux kernel,
+ * several internal kernel functions are hooked (e.g. do_init_module, free_module) in order
+ * to verify the behavior of the LKMs.
+ *
+ * If these modify some memory areas judged 'critical' (e.g. sys_call_table, IDT) we proceed
+ * with the revert of the changes and with the disassembly of the module
+ *
+ * @author Simone Tiberi
+ */
 #include <asm/unistd.h>
 #include <linux/printk.h>
 #include <linux/types.h>
@@ -10,7 +23,18 @@
 #include "shield.h"
 #include "symbols.h"
 
+/**
+ * areas - matrix of safe_area structures. The first row is associated with
+ * the structures that store the state of the memory associated with the system
+ * call table, the second one with those for the IDT, the third one with those for the
+ * additional symbols
+ */
 struct safe_area *areas[NUM_AREAS];
+
+/**
+ * num_additional_symbols - number of VALID additional symbols
+ * specified in the configuration file
+ */
 size_t num_additional_symbols;
 
 
@@ -18,7 +42,8 @@ size_t num_additional_symbols;
  * cache_single_ulong - function that stores the status of a single memory location
  * by doing debug audits too
  *
- * @param index: index of areas array
+ * @param sa:    array of safe_area structures
+ * @param index: index of the array
  * @addr:        address to save
  */
 static inline void cache_single_ulong(struct safe_area *sa, int index, unsigned long *addr)
@@ -28,6 +53,16 @@ static inline void cache_single_ulong(struct safe_area *sa, int index, unsigned 
         pr_debug(KBUILD_MODNAME ": address 0x%lx -> value 0x%lx", (unsigned long)addr, *addr);
 }
 
+
+/**
+ * cache_mem_area - function that caches a specific memory area (system call table or IDT)
+ *
+ * @param audit:         string to print
+ * @param start_address: address of the starting unsigned long
+ * @param length:        length of the memory area in unsigned long
+ * @param index:         row of the matrix
+ * @return               0 if ok, -E otherwise
+ */
 int cache_mem_area(const char *audit, unsigned long *start_address, int length, int index)
 {
         int i;
@@ -44,6 +79,10 @@ int cache_mem_area(const char *audit, unsigned long *start_address, int length, 
 }
 
 
+/**
+ * cache_additional_symbols_mem_area - function that caches the status of the memory
+ * zones specified as additional in the configuration file
+ */
 void cache_additional_symbols_mem_area(void)
 {
         unsigned long *addr;
@@ -53,7 +92,9 @@ void cache_additional_symbols_mem_area(void)
 
         for(i = 0; i < num_additional_symbols; ++i) {
                 addr = (unsigned long *)symbol_lookup(SAFE_SYMBOLS[i]);
+                pr_debug(KBUILD_MODNAME ": symbol \"%s\" address is 0x%lx", SAFE_SYMBOLS[i], addr);
                 if (addr == NULL) {
+                        pr_debug(KBUILD_MODNAME ": symbol \"%s\" not found, SKIP", SAFE_SYMBOLS[i]);
                         ++invalid;
                         continue;
                 }
@@ -69,7 +110,7 @@ void cache_additional_symbols_mem_area(void)
  * revert_to_good_state - function that allows you to revert the changes
  * made by the malicious LKM before removing it
  *
- * @param: address of the safe_area structure to be considered for revert
+ * @param a: address of the safe_area structure to be considered for revert
  */
 inline void revert_to_good_state(struct safe_area *a)
 {
@@ -81,6 +122,14 @@ inline void revert_to_good_state(struct safe_area *a)
 }
 
 
+/**
+ * inspect_sa - function that inspects a single array of safe_area structures
+ * to see if the memory has been tampered
+ *
+ * @param sa:     array of safe_area structures
+ * @param length: length of the array
+ * @return        true if the memory is unaffected, false otherwise
+ */
 static bool inspect_sa(struct safe_area *sa, int length)
 {
         int i;
@@ -108,7 +157,9 @@ static bool inspect_sa(struct safe_area *sa, int length)
  * in which the status of the memory areas to be protected is checked and,
  * if necessary, the module is reverted and unmounted
  *
- * @param the_module: module subjected to verification
+ * @param the_module:     module subjected to verification
+ * @param need_to_attach: true if the function is called from do_init_module kretprobe,
+ *                        false otherwise
  */
 void verify_safe_areas(struct monitored_module *the_module, bool need_to_attach)
 {
@@ -137,6 +188,13 @@ void verify_safe_areas(struct monitored_module *the_module, bool need_to_attach)
         preempt_enable();
 }
 
+
+/**
+ * count_additional_symbols - function that calculates the initial length
+ * of the array of additional symbols to consider
+ *
+ * @return the length of the array
+ */
 inline size_t count_additional_symbols(void)
 {
         int i;
