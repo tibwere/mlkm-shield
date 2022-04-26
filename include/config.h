@@ -8,6 +8,6 @@ extern const bool PROTECT_SYS_CALL_TABLE;
 extern const bool PROTECT_IDT;
 extern const char *SAFE_SYMBOLS[];
 extern const char *MODULE_WHITE_LIST[];
-extern const char *INITIAL_BLACK_LIST[];
+extern const char *MODULE_BLACK_LIST[];
 
 #endif // !_MLKM_SHIELD_CONFIG_H

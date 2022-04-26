@@ -32,9 +32,9 @@ const char *MODULE_WHITE_LIST[] = {
 };
 
 /**
- * INITIAL_BLACK_LIST - null terminated list of LKM by default
+ * MODULE_BLACK_LIST - null terminated list of LKM by default
  * considered malicious (not mounted at all)
  */
-const char *INITIAL_BLACK_LIST[] = {
+const char *MODULE_BLACK_LIST[] = {
         NULL,
 };

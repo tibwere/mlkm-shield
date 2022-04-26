@@ -8,6 +8,20 @@
 #include "safemem.h"
 #include "shield.h"
 #include "syncro.h"
+#include "bwlist.h"
+
+
+static int dummy_init(void)
+{
+        pr_debug("This is a dummy function. If you see this message it means that the module could not be mounted (either in blacklist or error in allocating memory for management)");
+        return 0;
+}
+
+
+static void dummy_cleanup(void)
+{
+        pr_debug("This is a dummy function. If you see this message it means that the module could not be mounted (either in blacklist or error in allocating memory for management)");
+}
 
 
 /**
@@ -38,6 +52,10 @@ static struct monitored_module * get_monitored_module_from_kretprobe_instance(st
  */
 static int verify_safe_areas_mount(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
+        /* The module is in white list */
+        if (unlikely(curr_module == NULL))
+                return 0;
+
         verify_safe_areas(curr_module, true);
         curr_module = NULL;
 
@@ -81,7 +99,7 @@ static int stop_monitoring_module(struct kprobe *kp, struct pt_regs *regs)
         struct monitored_module *mm, *tmp_mm;
         struct module *the_module;
 
-        the_module = (struct module *)regs->di;
+        the_module = (struct module *)regs_get_kernel_argument(regs, 0);
 
         list_for_each_entry_safe(mm, tmp_mm, &monitored_modules_list, links) {
                 if (likely(strncmp(mm->module->name, the_module->name, MODULE_NAME_LEN) != 0))
@@ -92,6 +110,13 @@ static int stop_monitoring_module(struct kprobe *kp, struct pt_regs *regs)
 
         return 0;
 }
+
+
+#define change_functions(malicious_module)              \
+({                                                      \
+        (malicious_module)->init = dummy_init;          \
+        (malicious_module)->exit = dummy_cleanup;       \
+})
 
 
 /**
@@ -106,12 +131,34 @@ static int stop_monitoring_module(struct kprobe *kp, struct pt_regs *regs)
 static int start_monitoring_module(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
         struct monitored_module *the_monitored_module;
+        struct module *module_to_be_inserted;
+
+        module_to_be_inserted = ((struct module *)regs_get_kernel_argument(regs, 0));
+
+        if (unlikely(is_in_white_list(module_to_be_inserted->name))) {
+                pr_debug(KBUILD_MODNAME ": the module \"%s\" is inside the white list so it will not be monitored",
+                        module_to_be_inserted->name);
+
+                return 0;
+        }
+
+        if (unlikely(is_in_black_list(module_to_be_inserted->name))) {
+                pr_debug(KBUILD_MODNAME ": the module \"%s\" is in the black list so it will not be mounted",
+                        module_to_be_inserted->name);
+
+                change_functions(module_to_be_inserted);
+                return -EINVAL;
+        }
 
         the_monitored_module = (struct monitored_module *)kzalloc(sizeof(struct monitored_module), GFP_KERNEL);
-        if (unlikely(the_monitored_module == NULL))
-                return -ENOMEM;
+        if (unlikely(the_monitored_module == NULL)) {
+                pr_debug(KBUILD_MODNAME ": unable to allocate memory for module \"%s\" monitoring", module_to_be_inserted->name);
 
-        the_monitored_module->module = (struct module *)regs->di;
+                change_functions(module_to_be_inserted);
+                return -ENOMEM;
+        }
+
+        the_monitored_module->module = module_to_be_inserted;
         INIT_LIST_HEAD(&(the_monitored_module->probes));
 
         list_add(&(the_monitored_module->links), &monitored_modules_list);
