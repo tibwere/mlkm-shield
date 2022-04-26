@@ -46,6 +46,7 @@ struct module_probe {
 extern struct list_head monitored_modules_list;
 extern struct monitored_module *curr_module;
 extern free_module_t free_module;
+extern int removed;
 
 
 /* Prototypes */

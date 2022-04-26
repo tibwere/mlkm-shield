@@ -26,6 +26,12 @@ free_module_t free_module;
 
 
 /**
+ * removed - number of LKMs removed
+ */
+int removed;
+
+
+/**
  * remove_malicious_lkm - function that takes care of removing the
  * malicious module and freeing the pre-allocated management memory areas
  *
@@ -34,6 +40,7 @@ free_module_t free_module;
 inline void remove_malicious_lkm(struct monitored_module *the_module)
 {
         struct module *mod;
+        removed++;
 
         mod = the_module->module;
         remove_module_from_list(the_module);

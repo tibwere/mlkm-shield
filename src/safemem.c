@@ -14,7 +14,6 @@
 #include <asm/unistd.h>
 #include <linux/printk.h>
 #include <linux/types.h>
-
 #include "safemem.h"
 #include "config.h"
 #include "hooks.h"
@@ -22,6 +21,7 @@
 #include "syncro.h"
 #include "shield.h"
 #include "symbols.h"
+
 
 /**
  * areas - matrix of safe_area structures. The first row is associated with

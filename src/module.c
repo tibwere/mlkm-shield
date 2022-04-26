@@ -19,6 +19,7 @@
 #include "safemem.h"
 #include "hooks.h"
 #include "config.h"
+#include "shield.h"
 
 
 /**
@@ -144,6 +145,9 @@ static void __exit mlkm_shield_cleanup(void)
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Simone Tiberi <simone.tiberi.98@gmail.com>");
 MODULE_DESCRIPTION("Protection against malicious LKM (Loadable Kernel Module)");
+
+module_param(removed, int, S_IRUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(removed, "A short integer");
 
 module_init(mlkm_shield_init);
 module_exit(mlkm_shield_cleanup);
