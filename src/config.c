@@ -1,3 +1,17 @@
+/**
+ * @file config.c
+ * @brief configuration file.
+ * Edit these variables before mounting the module to tune to your liking :)
+ *
+ * mlkm_shield - Taking advantage of the k[ret]probing mechanism offered by the Linux kernel,
+ * several internal kernel functions are hooked (e.g. do_init_module, free_module) in order
+ * to verify the behavior of the LKMs.
+ *
+ * If these modify some memory areas judged 'critical' (e.g. sys_call_table, IDT) we proceed
+ * with the revert of the changes and with the disassembly of the module
+ *
+ * @author Simone Tiberi
+ */
 #include <linux/types.h>
 
 /**

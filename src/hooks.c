@@ -1,3 +1,16 @@
+/**
+ * @file hooks.c
+ * @brief File containing the entire management of hooks linked to kernel and LKMs functions
+ *
+ * mlkm_shield - Taking advantage of the k[ret]probing mechanism offered by the Linux kernel,
+ * several internal kernel functions are hooked (e.g. do_init_module, free_module) in order
+ * to verify the behavior of the LKMs.
+ *
+ * If these modify some memory areas judged 'critical' (e.g. sys_call_table, IDT) we proceed
+ * with the revert of the changes and with the disassembly of the module
+ *
+ * @author Simone Tiberi
+ */
 #include <linux/kprobes.h>
 #include <linux/module.h>
 #include <linux/list.h>
@@ -11,6 +24,14 @@
 #include "bwlist.h"
 
 
+/**
+ * dummy_init - Dummy init function for modules:
+ *      - that are inside the blacklist,
+ *      - for which it was not possible to allocate the data
+ *        structures for monitoring
+ *
+ * @return always 0
+ */
 static int dummy_init(void)
 {
         pr_debug("This is a dummy function. If you see this message it means that the module could not be mounted (either in blacklist or error in allocating memory for management)");
@@ -18,6 +39,12 @@ static int dummy_init(void)
 }
 
 
+/**
+ * dummy_cleanup - Dummy cleanup function for modules:
+ *      - that are inside the blacklist,
+ *      - for which it was not possible to allocate the data
+ *        structures for monitoring
+ */
 static void dummy_cleanup(void)
 {
         pr_debug("This is a dummy function. If you see this message it means that the module could not be mounted (either in blacklist or error in allocating memory for management)");
@@ -29,6 +56,7 @@ static void dummy_cleanup(void)
  * of the monitored_module structure starting from the kretprobe_instance
  *
  * @param ri: kretprobe from which to derive the monitored_module structure
+ * @return    monitored module associated with the kretprobe
  */
 static struct monitored_module * get_monitored_module_from_kretprobe_instance(struct kretprobe_instance *ri)
 {
@@ -112,6 +140,11 @@ static int stop_monitoring_module(struct kprobe *kp, struct pt_regs *regs)
 }
 
 
+/**
+ * change_functions - macro for changing the module's init and exit function
+ *
+ * @param malicious_module: module to change functions to
+ */
 #define change_functions(malicious_module)              \
 ({                                                      \
         (malicious_module)->init = dummy_init;          \
@@ -210,7 +243,7 @@ static int enable_single_core_execution(struct kretprobe_instance *ri, struct pt
  * received as parameter
  *
  * @param symbol_name: name of the symbol to be hooked
- * @return 0 if ok, -E otherwise
+ * @return             0 if ok, -E otherwise
  */
 static int attach_kretprobe_on(const char *symbol_name)
 {

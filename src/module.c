@@ -1,13 +1,13 @@
 /**
- * @file mlkm_shield.c
- * @brief This is the main source file for the MLKM_SHIELD (Malicious Loadable Kernel Module).
+ * @file module.c
+ * @brief main source file
  *
- * Taking advantage of the k[ret]probing mechanism offered by the Linux kernel, several internal kernel
- * functions are hooked (e.g. do_init_module, free_module) in order to verify the
- * behavior of the LKMs.
+ * mlkm_shield - Taking advantage of the k[ret]probing mechanism offered by the Linux kernel,
+ * several internal kernel functions are hooked (e.g. do_init_module, free_module) in order
+ * to verify the behavior of the LKMs.
  *
- * If these modify some memory areas judged 'critical' (e.g. sys_call_table, IDT) we proceed with
- * the revert of the changes and with the disassembly of the module
+ * If these modify some memory areas judged 'critical' (e.g. sys_call_table, IDT) we proceed
+ * with the revert of the changes and with the disassembly of the module
  *
  * @author Simone Tiberi
  */
@@ -21,6 +21,12 @@
 #include "config.h"
 
 
+/**
+ * initialize_memory_protection - function responsible for caching
+ * the status of the memory areas to be protected
+ *
+ * @return 0 if ok, -E otherwise
+ */
 static int initialize_memory_protection(void)
 {
         if (PROTECT_SYS_CALL_TABLE) {
@@ -79,6 +85,8 @@ static int initialize_memory_protection(void)
 
 /**
  * mlkm_shield_init - initialization function
+ *
+ * @return 0 if ok, -E otherwise
  */
 static int __init mlkm_shield_init(void)
 {
