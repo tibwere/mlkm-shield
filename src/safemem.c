@@ -1,6 +1,6 @@
 /**
  * @file safemem.c
- * @brief File containing memory management routines (e.g. caching, verification)
+ * @brief file containing memory management routines (e.g. caching, verification)
  *
  * mlkm_shield - Taking advantage of the k[ret]probing mechanism offered by the Linux kernel,
  * several internal kernel functions are hooked (e.g. do_init_module, free_module) in order
@@ -31,6 +31,7 @@
  * additional symbols
  */
 struct safe_area *areas[NUM_AREAS];
+
 
 /**
  * num_additional_symbols - number of VALID additional symbols

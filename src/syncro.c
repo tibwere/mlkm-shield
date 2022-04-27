@@ -1,3 +1,17 @@
+/**
+ * @file syncro.c
+ * @brief file containing the synchronization logic between cores for the verification
+ * of the integrity of the modules based on IPI
+ *
+ * mlkm_shield - Taking advantage of the k[ret]probing mechanism offered by the Linux kernel,
+ * several internal kernel functions are hooked (e.g. do_init_module, free_module) in order
+ * to verify the behavior of the LKMs.
+ *
+ * If these modify some memory areas judged 'critical' (e.g. sys_call_table, IDT) we proceed
+ * with the revert of the changes and with the disassembly of the module
+ *
+ * @author Simone Tiberi
+ */
 #include <linux/types.h>
 #include <linux/smp.h>
 
@@ -7,6 +21,7 @@
  * until all workers have started executing the function
  */
 static atomic_t sync_enter __attribute__((aligned(64)));
+
 
 /**
  * sync_leave - synchronization barrier on which the worker spins
@@ -21,7 +36,7 @@ atomic_t sync_leave __attribute__((aligned(64)));
  *
  * @param info: not used
  */
-inline void sync_worker(void *info)
+void sync_worker(void *info)
 {
         unsigned int cpuid;
         cpuid = smp_processor_id();
@@ -52,5 +67,3 @@ inline void sync_master(void)
         while (atomic_read(&sync_enter) > 0);
         pr_debug(KBUILD_MODNAME ": all cores are syncronized");
 }
-
-

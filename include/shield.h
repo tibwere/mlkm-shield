@@ -1,10 +1,22 @@
+/**
+ * @file shield.h
+ * @brief header file for the removal stuffs (@see ${basedir}/src/shield.c)
+ *
+ * mlkm_shield - Taking advantage of the k[ret]probing mechanism offered by the Linux kernel,
+ * several internal kernel functions are hooked (e.g. do_init_module, free_module) in order
+ * to verify the behavior of the LKMs.
+ *
+ * If these modify some memory areas judged 'critical' (e.g. sys_call_table, IDT) we proceed
+ * with the revert of the changes and with the disassembly of the module
+ *
+ * @author Simone Tiberi
+ */
 #ifndef _MLKM_SHIELD_SHIELD_H
 #define _MLKM_SHIELD_SHIELD_H
 
 #include <linux/module.h>
 #include <linux/types.h>
 #include <linux/kprobes.h>
-
 #include "symbols.h"
 
 

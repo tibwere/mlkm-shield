@@ -1,3 +1,16 @@
+/**
+ * @file symbols.c
+ * @brief file for managing the audit on / sys file system of information relating to identified threats
+ *
+ * mlkm_shield - Taking advantage of the k[ret]probing mechanism offered by the Linux kernel,
+ * several internal kernel functions are hooked (e.g. do_init_module, free_module) in order
+ * to verify the behavior of the LKMs.
+ *
+ * If these modify some memory areas judged 'critical' (e.g. sys_call_table, IDT) we proceed
+ * with the revert of the changes and with the disassembly of the module
+ *
+ * @author Simone Tiberi
+ */
 #include <linux/list.h>
 #include <linux/string.h>
 #include <linux/mutex.h>
@@ -5,10 +18,12 @@
 #include <linux/slab.h>
 #include "threats.h"
 
+
 /**
  * threat_list - list of identified threats
  */
 static LIST_HEAD(threat_list);
+
 
 /**
  * queue - queue in which to place requests to add threats
@@ -22,12 +37,19 @@ struct workqueue_struct *queue;
 static struct mutex mu;
 
 
+/**
+ * draw_line - draws a dashed line useful for dividing the rows of the table
+ *
+ * @param buf: the buffer to write the dashes
+ * @param ret: final length of buffer
+ */
 #define draw_line(buf, ret)                                             \
 ({                                                                      \
         for (i = 0; i < ROW_LEN; ++i)                                   \
                 ret += snprintf(buf + ret, PAGE_SIZE - ret, "-");       \
         ret += snprintf(buf + ret, PAGE_SIZE - ret, "\n");              \
 })
+
 
 /**
  * threat_show - function responsible for showing the threats
@@ -60,8 +82,7 @@ static ssize_t threats_show(struct kobject *kobj, struct kobj_attribute *attr, c
 
 
 /**
- * forbidden_store - makes it impossible to
- * write threats info from /sys
+ * forbidden_store - makes it impossible to write threats info from /sys
  *
  * @param kobj:  not used
  * @param attr:  not used
@@ -80,12 +101,14 @@ static ssize_t forbidden_store(struct kobject *kobj, struct kobj_attribute *attr
  */
 struct kobject *mlkm_shield_sys_kobj;
 
+
 /**
  * threats_attr - attribute for threat info in /sys
  */
 static struct kobj_attribute threats_attr = __ATTR(threats, S_IRUSR | S_IRGRP, threats_show, forbidden_store);
 
-/* Other stuff related to /sys audit */
+
+/* Other minor stuff related to /sys audit */
 static struct attribute *attrs[] = {
 	&threats_attr.attr,
 	NULL,	/* need to NULL terminate the list of attributes */
@@ -95,6 +118,12 @@ static struct attribute_group attr_group = {
 };
 
 
+/**
+ * init_threats_for_sys_audit - initialization function of the elements necessary
+ * for the management of the audit on sys (e.g. mutex, workqueue)
+ *
+ * @return 0 if ok, -E otherwise
+ */
 int init_threats_for_sys_audit(void)
 {
         mutex_init(&mu);
@@ -114,6 +143,10 @@ int init_threats_for_sys_audit(void)
 }
 
 
+/**
+ * destroy_threats_for_sys_audit - cleanup function of the elements necessary
+ * for the management of the audit on sys (e.g. mutex, workqueue)
+ */
 void destroy_threats_for_sys_audit(void)
 {
         struct threat *t, *tmp;
@@ -128,6 +161,13 @@ void destroy_threats_for_sys_audit(void)
 }
 
 
+/**
+ * do_the_linkage - function performed by the kworker responsible for
+ * inserting the new threat into the linked list
+ *
+ * @param work: work_struct as expected by the
+ *              prototype contained in the struct
+ */
 static void do_the_linkage(struct work_struct *work)
 {
         struct work_metadata *the_task = (struct work_metadata *)container_of((void *)work, struct work_metadata, the_work);
@@ -140,6 +180,15 @@ static void do_the_linkage(struct work_struct *work)
 }
 
 
+/**
+ * insert_new_threat - function used to allocate memory for the addition
+ * of the new threat and to schedule the insertion through deferred work
+ *
+ * @param malicious_lkm: malicious module that is the subject of the threat
+ * @param sa:            attack target safe_area struct
+ * @param hacked         new value specified by the attacker for the attacked area
+ * @return               0 if ok, -E otherwise
+ */
 int insert_new_threat(struct module *malicious_lkm, struct safe_area *sa, unsigned long hacked)
 {
         struct work_metadata *the_task;

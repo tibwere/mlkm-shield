@@ -1,3 +1,16 @@
+/**
+ * @file asm/x86.h
+ * @brief header file for x86 stuffs (@see ${basedir}/src/x86.c)
+ *
+ * mlkm_shield - Taking advantage of the k[ret]probing mechanism offered by the Linux kernel,
+ * several internal kernel functions are hooked (e.g. do_init_module, free_module) in order
+ * to verify the behavior of the LKMs.
+ *
+ * If these modify some memory areas judged 'critical' (e.g. sys_call_table, IDT) we proceed
+ * with the revert of the changes and with the disassembly of the module
+ *
+ * @author Simone Tiberi
+ */
 #ifndef _MLKM_SHIELD_X86_H
 #define _MLKM_SHIELD_X86_H
 

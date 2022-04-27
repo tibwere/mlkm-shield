@@ -149,6 +149,7 @@ static void __exit mlkm_shield_cleanup(void)
         pr_info(KBUILD_MODNAME ": successfully removed");
 }
 
+
 /* Module stuffs */
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Simone Tiberi <simone.tiberi.98@gmail.com>");

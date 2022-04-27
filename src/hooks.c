@@ -1,6 +1,6 @@
 /**
  * @file hooks.c
- * @brief File containing the entire management of hooks linked to kernel and LKMs functions
+ * @brief file containing the entire management of hooks linked to kernel and LKMs functions
  *
  * mlkm_shield - Taking advantage of the k[ret]probing mechanism offered by the Linux kernel,
  * several internal kernel functions are hooked (e.g. do_init_module, free_module) in order
@@ -16,7 +16,6 @@
 #include <linux/list.h>
 #include <linux/string.h>
 #include <linux/slab.h>
-
 #include "hooks.h"
 #include "safemem.h"
 #include "shield.h"
@@ -67,7 +66,7 @@ static struct monitored_module * get_monitored_module_from_kretprobe_instance(st
  * in which verify_safe_areas is called for the actual verification and
  * the reference to the module currently being assembled is reset
  *
- * @param ri:   not used
+ * @param ri:   used to retrieve data associated with kretprobe
  * @param regs: not used
  * @return:     always 0
  */
@@ -99,7 +98,7 @@ static int verify_safe_areas_mount(struct kretprobe_instance *ri, struct pt_regs
  * for the actual verification passing the reference to the metadata
  * structure using the appropriate function
  *
- * @param ri:   used to retrieve monitored_module struct (by using container_of)
+ * @param ri:   used to retrieve data associated with kretprobe
  * @param regs: not used
  * @return:     always 0
  */
@@ -147,6 +146,7 @@ static int stop_monitoring_module(struct kprobe *kp, struct pt_regs *regs)
  * and force its removal
  *
  * @param malicious_module: module to change functions to
+ * @param krp_data:         data associated with kretprobe
  */
 #define invalid_module(malicious_module, krp_data)              \
 ({                                                              \
@@ -217,7 +217,7 @@ out:
  * enable_single_core_execution - pre-handler of each function defined in the various
  * modules in which 'single core' execution is required
  *
- * @param ri:   used to retrieve monitored_module struct (by using container_of)
+ * @param ri:   used to retrieve data associated with kretprobe
  * @param regs: not used
  * @return:     always 0
  */
@@ -343,6 +343,7 @@ struct kretprobe do_init_module_kretprobe = {
         .handler             = verify_safe_areas_mount,
         .data_size           = sizeof(struct kretprobe_private_data_ins),
 };
+
 
 /**
  * free_module_kretprobe - kretprobe to hook to do_init_module
