@@ -20,6 +20,7 @@
 #include "hooks.h"
 #include "config.h"
 #include "shield.h"
+#include "threats.h"
 
 
 /**
@@ -97,8 +98,13 @@ static int __init mlkm_shield_init(void)
 
         free_module = (free_module_t)symbol_lookup("free_module");
         if (unlikely(free_module == NULL)) {
-                pr_info(KBUILD_MODNAME ": free_module symbol not found so it would be impossibile to remove module if necessary -> ABORT");
+                pr_info(KBUILD_MODNAME ": free_module symbol not found so it would be impossibile to remove module if necessary");
                 return -EINVAL;
+        }
+
+        if (unlikely(init_threats_for_sys_audit())) {
+                pr_info(KBUILD_MODNAME ": impossibile to initialize sys audit");
+                return -ENOMEM;
         }
 
         do_init_module_kretprobe.kp.symbol_name = "do_init_module";
@@ -126,6 +132,8 @@ static void __exit mlkm_shield_cleanup(void)
 {
         int i;
         struct monitored_module *mm, *tmp_mm;
+
+        destroy_threats_for_sys_audit();
         unregister_kretprobe(&do_init_module_kretprobe);
         unregister_kprobe(&free_module_kprobe);
 

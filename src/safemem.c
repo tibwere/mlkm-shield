@@ -21,6 +21,7 @@
 #include "syncro.h"
 #include "shield.h"
 #include "symbols.h"
+#include "threats.h"
 
 
 /**
@@ -126,11 +127,12 @@ inline void revert_to_good_state(struct safe_area *a)
  * inspect_sa - function that inspects a single array of safe_area structures
  * to see if the memory has been tampered
  *
+ * @param module: module under inspection
  * @param sa:     array of safe_area structures
  * @param length: length of the array
  * @return        true if the memory is unaffected, false otherwise
  */
-static bool inspect_sa(struct safe_area *sa, int length)
+static bool inspect_sa(struct module *module, struct safe_area *sa, int length)
 {
         int i;
         if (sa == NULL)
@@ -142,8 +144,9 @@ static bool inspect_sa(struct safe_area *sa, int length)
                                 (unsigned long)sa[i].addr,
                                 sa[i].value,
                                 *(sa[i].addr));
-                        revert_to_good_state(&(sa[i]));
 
+                        insert_new_threat(module, &(sa[i]), *(sa[i].addr));
+                        revert_to_good_state(&(sa[i]));
                         return false;
                 }
         }
@@ -172,7 +175,7 @@ void verify_safe_areas(struct monitored_module *the_module, bool need_to_attach)
         };
 
         for (i = 0; i < 3 && good; ++i) {
-                if (!inspect_sa(areas[i], lengths[i]))
+                if (!inspect_sa(the_module->module, areas[i], lengths[i]))
                         good = false;
         }
 

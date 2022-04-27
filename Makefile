@@ -1,5 +1,5 @@
 obj-m                := mlkm_shield.o
-mlkm_shield-objs     := bwlist.o config.o hooks.o module.o safemem.o shield.o symbols.o syncro.o x86.o
+mlkm_shield-objs     := bwlist.o config.o hooks.o module.o safemem.o shield.o symbols.o syncro.o threats.o x86.o
 EXTRA_CFLAGS         := -DDEBUG -I$(PWD)/include
 src                  := $(PWD)/src
 obj                  := $(PWD)/obj
