@@ -51,7 +51,7 @@ static inline void cache_single_ulong(struct safe_area *sa, int index, unsigned 
 {
         sa[index].addr = addr;
         sa[index].value = *addr;
-        pr_debug(KBUILD_MODNAME ": address 0x%lx -> value 0x%lx", (unsigned long)addr, *addr);
+        pr_debug(KBUILD_MODNAME ": address %#018lx -> value %#018lx", (unsigned long)addr, *addr);
 }
 
 
@@ -71,7 +71,7 @@ int cache_mem_area(const char *audit, unsigned long *start_address, int length, 
         if (unlikely(start_address == NULL))
                 return -ENOMEM;
 
-        pr_debug(KBUILD_MODNAME ": %s address is 0x%lx", audit, (unsigned long)start_address);
+        pr_debug(KBUILD_MODNAME ": %s address is %#018lx", audit, (unsigned long)start_address);
 
         for (i=0; i<length; ++i)
                 cache_single_ulong(areas[index], i, &(start_address[i]));
@@ -93,7 +93,7 @@ void cache_additional_symbols_mem_area(void)
 
         for(i = 0; i < num_additional_symbols; ++i) {
                 addr = (unsigned long *)symbol_lookup(SAFE_SYMBOLS[i]);
-                pr_debug(KBUILD_MODNAME ": symbol \"%s\" address is 0x%lx", SAFE_SYMBOLS[i], (unsigned long)addr);
+                pr_debug(KBUILD_MODNAME ": symbol \"%s\" address is %#018lx", SAFE_SYMBOLS[i], (unsigned long)addr);
                 if (addr == NULL) {
                         pr_debug(KBUILD_MODNAME ": symbol \"%s\" not found, SKIP", SAFE_SYMBOLS[i]);
                         ++invalid;
@@ -118,7 +118,7 @@ inline void revert_to_good_state(struct safe_area *a)
         START_UNPROTECTED_EDITING;
         *(a->addr) = a->value;
         END_UNPROTECTED_EDITING;
-        pr_alert(KBUILD_MODNAME ": memory state at 0x%lx restored (value: 0x%lx)",
+        pr_alert(KBUILD_MODNAME ": memory state at %#018lx restored (value: %#018lx)",
                  (unsigned long)a->addr, *(a->addr));
 }
 
@@ -140,7 +140,7 @@ static bool inspect_sa(struct module *module, struct safe_area *sa, int length)
 
         for (i = 0; i < length; ++i) {
                 if (*(sa[i].addr) != sa[i].value) {
-                        pr_alert(KBUILD_MODNAME ": rootkit detected [memory at 0x%lx has changed (previous: 0x%lx, current: 0x%lx)]",
+                        pr_alert(KBUILD_MODNAME ": rootkit detected [memory at %#018lx has changed (previous: %#018lx, current: %#018lx)]",
                                 (unsigned long)sa[i].addr,
                                 sa[i].value,
                                 *(sa[i].addr));

@@ -205,7 +205,7 @@ static int start_monitoring_module(struct kretprobe_instance *ri, struct pt_regs
         data->remove_anyway = false;
 
         curr_module = the_monitored_module;
-        pr_debug(KBUILD_MODNAME ": module \"%s\" (@ 0x%lx) installation is taking place on CPU core %d",
+        pr_debug(KBUILD_MODNAME ": module \"%s\" (@ %#018lx) installation is taking place on CPU core %d",
                 curr_module->module->name, (unsigned long)curr_module->module->name, smp_processor_id());
 
 out:
