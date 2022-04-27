@@ -1,0 +1,107 @@
+\documentclass{article}
+
+% Package necessari
+\usepackage[a4paper]{geometry}
+\usepackage[utf8]{inputenc}
+\usepackage[italian]{babel}
+\usepackage[T1]{fontenc}
+\usepackage[font={small,sl}]{caption}
+\usepackage[font={small,sl}]{subcaption}
+\usepackage{graphicx}
+\usepackage[usenames, table, dvipsnames]{xcolor}
+\usepackage{hyperref}
+\usepackage[most]{tcolorbox}
+\usepackage[section]{placeins}
+\usepackage{soulutf8}
+\usepackage{listings}
+\usepackage{tabularray}
+
+% Titolo del documento
+\title{\small Relazione del progetto di Network \& System Defense \\
+\Huge \textbf{MLKM SHIELD}\\
+\Large (Protection against malicious LKM)}
+
+% Autore del documento
+\author{Simone Tiberi (M. 0299908)\\%
+(email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.com}})}
+
+% Data del documento
+\date{\today}
+
+% Impostazione delle lunghezze di alcuni elementi del documento
+\setlength{\parskip}{1em}
+\setlength{\parindent}{0em}
+
+% Impostazioni del package hyperref
+\hypersetup{
+        colorlinks=true,
+        linktocpage=true,
+        linkcolor=blue,
+        urlcolor=blue,
+        pdftitle={Relazione progetto NSD},
+        pdfauthor={Simone Tiberi},
+}
+
+% Tokyonight colors
+\definecolor{tn-bg}{HTML}{24283b}
+\definecolor{tn-terminal}{HTML}{414868}
+\definecolor{tn-red}{HTML}{f7768e}
+\definecolor{tn-fg}{HTML}{c0caf5}
+\definecolor{tn-fg-dark}{HTML}{a9b1d6}
+\definecolor{tn-green}{HTML}{9ece6a}
+\definecolor{tn-comment}{HTML}{565f89}
+\definecolor{tn-blue0}{HTML}{3d59a1}
+\definecolor{tn-blue}{HTML}{7aa2f7}
+\definecolor{tn-cyan}{HTML}{7dcfff}
+
+\lstset{
+	language=C,
+	frame=shadowbox,
+        backgroundcolor=\color{tn-bg},
+	rulesepcolor=\color{tn-terminal},
+        basicstyle=\color{tn-fg}\ttfamily\scriptsize,
+	keywordstyle=\color{tn-red}\bfseries\scriptsize,
+	stringstyle=\color{tn-green}\scriptsize,
+	commentstyle=\color{tn-comment}\scriptsize,
+	numbers=left,
+	numberstyle=\tiny\color{tn-fg-dark},
+	numbersep=5pt,
+	tabsize=2,
+	showtabs=false,
+	showspaces=false,
+	showstringspaces=false,
+	escapechar=|,
+	captionpos=b,
+	breaklines=true,
+	keepspaces=true
+}
+
+\renewcommand{\lstlistingname}{Listato}
+\graphicspath{ {./figs/} }
+
+\newtcolorbox{custombox}[1]{
+        colframe = blue!25,
+        colback  = blue!10,
+        coltitle = blue!20!black,
+        title    = #1,
+        breakable,
+        enhanced,
+}
+
+\newcommand{\terminal}[1]{\colorbox{tn-bg}{\textcolor{tn-fg}{\texttt{#1}}}}
+
+\begin{document}
+\maketitle
+
+\section{Specifica del progetto (traduzione)}
+Questo progetto prevede la scrittura di un meccanismo di protezione del kernel Linux (e.g. patch, modulo di sicurezza, LKM) per impedire che i LKM malevoli manomettano strutture dati core.
+
+In particolare, al di là dell'esempio discusso a lezione, è possibile che un modulo non esegua alcun attacco durante la fase di caricamento, ma agisca secondo uno schema di deferred work (e.g. sfruttando il supporto alle tasklet). Il meccanismo di protezione dovrebbe essere in grado di rilevare questa tipologia di attacchi.
+
+Nel caso in cui un modulo viene rilevato come malevolo, deve essere smontato e qualsiasi possibile effetto collaterale generato da esso dovrebbe essere ripristinato.
+
+\newpage
+\bibliographystyle{IEEEtran}
+\bibliography{report}
+
+\end{document}
