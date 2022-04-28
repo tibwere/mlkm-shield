@@ -78,7 +78,6 @@
 	keepspaces=true
 }
 
-\renewcommand{\lstlistingname}{Listato}
 \graphicspath{ {./figs/} }
 
 \newtcolorbox{custombox}[1]{
@@ -120,6 +119,19 @@
 	in a \textit{good} state. As a matter of fact, in the beginning of the installation process the state of
 	the critical memory areas is \textbf{cached}.
 
+	Another assumption is that the areas to be protected are immutable over time and therefore it is not necessary
+	to update the caching status from time to time at each execution of the modules under analysis.
+
+	The areas considered critical and therefore monitored by the shield module are:
+	\begin{itemize}
+		\item \textbf{System call table}, because a rootkit can change some function pointers within the table
+		and thus change the behavior of certain system calls,
+		\item \textbf{IDT} (\textbf{I}nterrupt \textbf{D}escriptor \textbf{T}able), because a rootkit can modify
+		interrupt handlers to perform malicious activity,
+		\item a list of \textbf{additional symbols} that the sysadmin can specify inside a configuration file
+		(sec.~\ref{sec:config}) before mounting the shield module.
+	\end{itemize}
+
 	Taking advantage of the \texttt{kretpobe} (and also \texttt{kprobe}) mechanisms offered by Linux
 	Kernel~\cite{doc:kprobe} the very last function invoked by the kernel inside the mounting process
 	is hooked, so that after the return statement, a \textbf{verification step} can begin
@@ -149,16 +161,48 @@
 
 	For this reason the use of IPI has been introduced to ensure that:
 	\begin{itemize}
-		\item in the \textbf{pre-handler}, the core that is performing the mount (in an non-preemptible way) of the
-		module, requires the others to spin on a certain barrier variable,
+		\item in the \textbf{pre-handler}, the core that is performing the mount of the module (in an non-preemptible way),
+		requires the others to spin on a certain barrier variable,
 		\item in the \textbf{post-handler}, the same core as before changes the value of the barrier variable, thus
 		allowing the restoration of normal activity.
 	\end{itemize}
 
 	Finally, for the detection of malicious actions in deferred mode, the probe mechanism was exploited again, this
-	time dynamically hooking functions inside the module, as described in detail in the section ~\ref{sec:hooks}.
+	time dynamically hooking functions inside the modules, as described in detail in the section ~\ref{sec:hooks}.
 
 	\section{Components description}
+
+	\subsection{"Configuration" component}\label{sec:config}
+	\textbf{"Configuration"} is a component in which there are defined a few variables that a sysadmin can change to tune
+	the shield module according to his needs. In particular there are:
+	\begin{itemize}
+		\item two boolean variables to decide whether or not to secure system call table and IDT respectively,
+		\item the list of additional symbols to protect, \ul{where you do not have to specify the address
+			directly}, but the name of the symbol, readable from \texttt{/proc/kallysms},
+		\item a white list of modules not to be monitored, because they are considered not malicious \textit{a priori},
+		\item a black list of modules to be considered malicious \textit{a priori} and therefore not to be mounted.
+	\end{itemize}
+
+	\subsection{"Safe memory" component}
+	\textbf{Safe memory} is one of the core components of the module. Inside, it is defined the data structure \texttt{safe\_area} (list.~\ref{lst:safe-area}), which is the logical representation of the caching of the state of a specific \textit{quad word} (\texttt{64 bits}) in memory.
+
+	Inside the module three different arrays of \texttt{safe\_area} structures are used:
+	\begin{itemize}
+		\item one for system call table function pointer, of size \texttt{NR\_syscalls},
+		\item one for IDT, seen as a sequence of unsigned long which implies that the size of array is evaluated as:
+		\begin{equation*}
+			\dfrac{\mathtt{IDT\_ENTRIES} \cdot \mathtt{sizeof(gate\_desc)}}{\mathtt{sizeof(unsigned long)}}
+		\end{equation*}
+		\item one for the list of additional symbols specified inside the array in the configuration file.
+	\end{itemize}
+
+	\lstinputlisting[
+		caption={\texttt{safe\_area} struct},
+		label={lst:safe-area},
+		escapechar=,
+		firstline=31,
+		lastline=40
+	]{../include/safemem.h}
 
 	\bibliographystyle{plain}
 	\bibliography{report}
