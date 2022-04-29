@@ -184,7 +184,9 @@
 	\end{itemize}
 
 	\subsection{"Safe memory" component}
-	\textbf{Safe memory} is one of the core components of the module. Inside, it is defined the data structure \texttt{safe\_area} (list.~\ref{lst:safe-area}), which is the logical representation of the caching of the state of a specific \textit{quad word} (\texttt{64 bits}) in memory.
+	\textbf{Safe memory} is one of the core components of the module. Inside, it is defined the data structure \texttt{safe\_area} 
+	(list.~\ref{lst:safe-area}), which is the logical representation of the caching of the state of a specific \textit{quad word} 
+	(\texttt{64 bits}) in memory.
 
 	Inside the module three different arrays of \texttt{safe\_area} structures are used:
 	\begin{itemize}
@@ -203,6 +205,17 @@
 		firstline=31,
 		lastline=40
 	]{../include/safemem.h}
+	
+	One of the main functions defined in this module is \texttt{verify\_safe\_areas} used in a lot of handlers defined into the 
+	\textbf{"Hooks"} component. Inside, \texttt{inspect\_sa} is called for each array to check if critical memory areas have been 
+	altered. In this case:
+	
+	\begin{itemize}
+		\item a new threat is added to the sys audit (sec.~\ref{sec:threats}),
+		\item the hacked memory area is restored, after disabling the memory protection by overwriting the \texttt{CR0} register 
+		(sec~\ref{sec:x86}),
+		\item the malicious module is removed (sec. ~\ref{sec:shield}).
+	\end{itemize}
 
 	\bibliographystyle{plain}
 	\bibliography{report}
