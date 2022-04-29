@@ -233,10 +233,7 @@
 	\end{itemize}
 
 	In list.~\ref{lst:shield-structs} are shown these structures and furthermore in fig..~\ref{fig:shield-structs} is
-	represented how thy are linked together
-
-	In fig.~\ref{fig:shield-structs} is represented how these functions are linked together and furthermore in the
-	list.~\ref{lst:shield-structs} are.
+	represented how thy are linked together.
 
 	\begin{figure}[!htbp]
 		\centering
@@ -244,6 +241,14 @@
 		\caption{Relationship between \texttt{monitored\_module} and \texttt{module\_probe}}
 		\label{fig:shield-structs}
 	\end{figure}
+
+	\lstinputlisting[
+		caption={\texttt{monitored\_module} and \texttt{module\_probe} structs},
+		label={lst:shield-structs},
+		escapechar=,
+		firstline=23,
+		lastline=54
+	]{../include/shield.h}
 
 	Inside this component is defined also a parameter of the module, that is the \texttt{removed} variable. Moment by
 	moment is it possible to see how many modules have been detected as malicious reading the content of
