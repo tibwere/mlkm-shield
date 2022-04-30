@@ -81,12 +81,13 @@
 \graphicspath{ {./figs/} }
 
 \newtcolorbox{custombox}[1]{
-        colframe = blue!25,
-        colback  = blue!10,
-        coltitle = blue!20!black,
-        title    = #1,
-        breakable,
-        enhanced,
+	colframe  = blue!25,
+    colback   = blue!10,
+    coltitle  = blue!20!black,
+    title     = #1,
+	fonttitle = \bfseries,
+    breakable,
+    enhanced,
 }
 
 \newcommand{\terminal}[1]{\colorbox{tn-bg}{\textcolor{tn-fg}{\texttt{#1}}}}
@@ -105,9 +106,12 @@
 	reverted.
 
 	\section{Project structure}
-	As can be seen in the Github repository~\cite{github:repo}, the project is organized into several files, each of
-	which contains stuffs relating to certain components of the project (e.g. hooks, \textit{machine-specific}
-	operations, \dots).
+	\begin{custombox}{Repository}
+		Link to Github repository: \url{https://github.com/tibwere/mlkm-shield}
+	\end{custombox}
+
+	The project is organized into several files, each of which contains stuffs relating to certain components of the
+	project (e.g. hooks, \textit{machine-specific} operations, \dots).
 
 	The following sections are aimed at describing each component of the module developed, by analyzing core data
 	structures and procedures implemented, as well as the general idea behind the functioning of the module.
@@ -131,7 +135,7 @@
 	\end{itemize}
 
 	Taking advantage of the \texttt{kretpobe} (and also \texttt{kprobe}) mechanisms offered by Linux
-	Kernel~\cite{doc:kprobe} the very last function invoked by the kernel inside the mounting process is hooked, so
+	Kernel, the very last function invoked by the kernel inside the mounting process is hooked, so
 	that after the return statement, a \textbf{verification step} can begin (fig.~\ref{fig:monitoring}).
 
 	\begin{figure}[!htbp]
@@ -215,6 +219,7 @@
 		\item the malicious module is removed (sec. ~\ref{sec:shield}).
 	\end{itemize}
 
+	\newpage
 	\subsection{"Shield" component}\label{sec:shield}
 	Inside the \textbf{shield} component are defined two core structures for the functionality of the module:
 	\begin{itemize}
@@ -258,7 +263,4 @@
 	to use the function \texttt{free\_module}, which is not exported by default for module programming. For this
 	reason, using a function defined inside the \textbf{symbols} component (sec.~\ref{sec:symbols}) its address has
 	been retrieved.
-
-	\bibliographystyle{plain}
-	\bibliography{report}
 \end{document}
