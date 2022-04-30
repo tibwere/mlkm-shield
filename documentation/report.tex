@@ -263,4 +263,21 @@
 	to use the function \texttt{free\_module}, which is not exported by default for module programming. For this
 	reason, using a function defined inside the \textbf{symbols} component (sec.~\ref{sec:symbols}) its address has
 	been retrieved.
+
+	\subsection{"Symbols" component}\label{sec:symbols}
+	In the \textbf{symbols} component are defined some utility functions used by other ones, such as:
+	\begin{itemize}
+		\item \texttt{symbol\_lookup}, which allows you to retrieve the address of a symbol in the kernel memory space
+		specifying its name. To do this you need to use the \texttt{kallsyms\_lookup\_name} function, which is no
+		longer available for module programming starting with kernel 5.7, so the kprobing mechanism was used to
+		retrieve its address,
+		\item \texttt{get\_system\_call\_table\_address}, which by relying on the previous one, lets you to retrieve
+		the address of the system call table. Up to version 4.4 of Linux, the search is carried out according to a
+		brute force approach, starting from the address of \texttt{the sys\_close} system call\footnote{For
+			conventional Linux Kernel builds, this address is lower than the system call table one.},
+		\item \texttt{get\_idt\_address}, which allows you to retrieve the base address of the IDT, by relying on the
+		\texttt{SIDT} instruction wrapped into the
+		\href{https://elixir.bootlin.com/linux/latest/source/arch/x86/include/asm/desc.h#L223}{\texttt{store\_idt}} API
+		of the kernel
+	\end{itemize}
 \end{document}
