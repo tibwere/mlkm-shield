@@ -176,6 +176,18 @@
 
 	\section{Components description}
 
+	\subsection{"Black/White list" component}\label{sec:bwlist}
+	This component simply contains a function and a couple of macros for inserting modules into the black / white list.
+	These two lists allow to realize the following mechanisms:
+	\begin{itemize}
+		\item a module present in the \textbf{white list} is considered \textit{a priori} not malicious and therefore
+		is not subject to monitoring, which implies that it will not be damaged in terms of performance due to the use
+		of kretprobes,
+		\item a module present in the \textbf{black list} is considered \textit{a priori} malicious and therefore is
+		removed directly. In sec.~\ref{sec:hooks} it will be showed the mechanism used to safely remove this kind of
+		module without risking \texttt{SEGFAULT} or execution of malicious code.
+	\end{itemize}
+
 	\subsection{"Configuration" component}\label{sec:config}
 	\textbf{"Configuration"} is a component in which there are defined a few variables that a sysadmin can change to
 	tune the shield module according to his needs. In particular there are:
@@ -240,8 +252,6 @@
 		\label{fig:shield-structs}
 	\end{figure}
 
-
-
 	Inside this component is defined also a parameter of the module, that is the \texttt{removed} variable. Moment by
 	moment is it possible to see how many modules have been detected as malicious reading the content of
 	\texttt{/sys/module/mlkm\_shield/parameters/removed} pseudo-file.
@@ -250,9 +260,8 @@
 	to use the function \texttt{free\_module}, which is not exported by default for module programming. For this
 	reason, using a function defined inside the \textbf{symbols} component (sec.~\ref{sec:symbols}) its address has
 	been retrieved.
-	
-	\subsection{Other minor components}
-	\subsubsection{"Symbols" component}\label{sec:symbols}
+
+	\subsection{"Symbols" component}\label{sec:symbols}
 	In the \textbf{symbols} component are defined some utility functions used by other ones, such as:
 	\begin{itemize}
 		\item \texttt{symbol\_lookup}, which allows you to retrieve the address of a symbol in the kernel memory space
@@ -269,27 +278,15 @@
 		of the kernel
 	\end{itemize}
 
-	\subsubsection{"Bwlist" component}\label{sec:bwlist}
-	This component simply contains a function and a couple of macros for inserting modules into the black / white list.
-	These two lists allow to realize the following mechanisms:
-	\begin{itemize}
-		\item a module present in the \textbf{white list} is considered \textit{a priori} not malicious and therefore 
-		is not subject to monitoring, which implies that it will not be damaged in terms of performance due to the use 
-		of kretprobes,
-		\item a module present in the \textbf{black list} is considered \textit{a priori} malicious and therefore is 
-		removed directly. In sec.~\ref{sec:hooks} it will be showed the mechanism used to safely remove this kind of 
-		module without risking \texttt{SEGFAULT} or execution of malicious code.
-	\end{itemize}
-
-	\subsubsection{"x86" component}\label{sec:x86}
-	This component simply contains a function and a couple of macros to modify \texttt{CR0} register to enable/disable 
-	memory protection. For all this we change the bit \texttt{X86\_CR0\_WP} using \texttt{memory} clobber to avoid 
-	compile-time instruction reordering (according to 
-	\href{https://elixir.bootlin.com/linux/v5.17.3/source/arch/x86/include/asm/special_insns.h#L54}{this} 
+	\subsection{"Machine specific (x86)" component}\label{sec:x86}
+	This component simply contains a function and a couple of macros to modify \texttt{CR0} register to enable/disable
+	memory protection. For all this we change the bit \texttt{X86\_CR0\_WP} using \texttt{memory} clobber to avoid
+	compile-time instruction reordering (according to
+	\href{https://elixir.bootlin.com/linux/v5.17.3/source/arch/x86/include/asm/special_insns.h#L54}{this}
 	implementation).
-	
+
 	As you can see by analyzing the source code, the module uses machine-specific facilities for x86, so for a possible porting to other architectures it would be necessary to define additional header files in the \texttt{asm} directory and different implementations of the API C using \texttt{\#define CONFIG\_XXX} directives.
-	
+
 	\begin{appendices}
 		\section{Source codes mentioned in the document}
 		\lstinputlisting[
@@ -299,7 +296,7 @@
 			firstline=31,
 			lastline=40
 		]{../include/safemem.h}
-		
+
 		\lstinputlisting[
 			caption={\texttt{monitored\_module} and \texttt{module\_probe} structs},
 			label={lst:shield-structs},
