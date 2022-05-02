@@ -1,6 +1,6 @@
 /**
  * @file symbols.c
- * @brief file for managing the audit on / sys file system of information relating to identified threats
+ * @brief file for managing the audit on /sys file system of information relating to identified threats
  *
  * mlkm_shield - Taking advantage of the k[ret]probing mechanism offered by the Linux kernel,
  * several internal kernel functions are hooked (e.g. do_init_module, free_module) in order
