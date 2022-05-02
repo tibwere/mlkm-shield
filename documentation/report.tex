@@ -40,7 +40,7 @@
         linkcolor=blue,
         urlcolor=blue,
         citecolor=blue,
-        pdftitle={Relazione progetto NSD},
+        pdftitle={NSD project report},
         pdfauthor={Simone Tiberi},
 }
 
@@ -127,7 +127,7 @@
 	memory areas is \textbf{cached}.
 
 	Another assumption is that the areas to be protected are immutable over time and therefore it is not necessary to
-	update the caching status from time to time at each execution of the modules under analysis.
+	update the caching status \textit{continuously}.
 
 	The areas considered critical and therefore monitored by the shield module are:
 	\begin{itemize}
@@ -135,8 +135,8 @@
 		change the behavior of certain system calls,
 		\item \textbf{IDT} (\textbf{I}nterrupt \textbf{D}escriptor \textbf{T}able), because a rootkit can modify
 		interrupt handlers to perform malicious activity,
-		\item a list of \textbf{additional symbols} that the sysadmin can specify inside a configuration file
-		(sec.~\ref{sec:config}) before mounting the shield module.
+		\item a list of \textbf{additional symbols} (e.g. some crypto keys) that the sysadmin can specify inside a
+		configuration file (sec.~\ref{sec:config}) before mounting the shield module.
 	\end{itemize}
 
 	Taking advantage of the \texttt{kretpobe} (and also \texttt{kprobe}) mechanisms offered by Linux
@@ -184,50 +184,52 @@
 	These two lists allow to realize the following mechanisms:
 	\begin{itemize}
 		\item a module present in the \textbf{white list} is considered \textit{a priori} not malicious and therefore
-		is not subject to monitoring, which implies that it will not be damaged in terms of performance due to the use
+		is not subject to monitoring, which implies that it will not be damaged in terms of performance, due to the use
 		of kretprobes,
 		\item a module present in the \textbf{black list} is considered \textit{a priori} malicious and therefore is
 		removed directly. In sec.~\ref{sec:hooks} it will be showed the mechanism used to safely remove this kind of
-		module without risking \texttt{SEGFAULT} or execution of malicious code.
+		module without risking the execution of malicious code.
 	\end{itemize}
 
 	\subsection{\textsl{Configuration} component}\label{sec:config}
-	\textbf{"Configuration"} is a component in which there are defined a few variables that a sysadmin can change to
-	tune the shield module according to his needs. In particular there are:
+	In this component are defined a few variables that a sysadmin can change \ul{before the installation of the shield}
+	to tune it according to his needs. In particular there are:
 	\begin{itemize}
-		\item two boolean variables to decide whether or not to secure system call table and IDT respectively,
+		\item two boolean variables to decide whether or not to secure system call table and \texttt{IDT} respectively,
 		\item the list of additional symbols to protect, \ul{where you do not have to specify the address directly},
 		but the name of the symbol, readable from \texttt{/proc/kallysms},
-		\item a white list of modules not to be monitored, because they are considered not malicious \textit{a priori},
-		\item a black list of modules to be considered malicious \textit{a priori} and therefore not to be mounted.
+		\item the modules inside the white and the black list.
 	\end{itemize}
 
 	\subsection{\textsl{Hooks} component}\label{sec:hooks}
-	The \textbf{hooks} component is the most complex in the module. For this reason the analysis is divided into
-	subsections as follows.
+	This is the most complex component in the module. For this reason the analysis is divided into subsections as
+	follows.
 
 	\subsubsection{Kretprobe hooked to \texttt{do\_init\_module}}
 	The pre-handler of this function is \texttt{start\_monitoring\_module} in which:
 	\begin{itemize}
-		\item the address of the module structure (first parameter) is retrieved using the dedicated API instead of
-		accessing directly \texttt{RDI} register to enhance portability of the code,
-		\item it is checked if the module belongs to the white list membership and if so, the remaining part is skipped
+		\item the address of the \texttt{module} structure (1$^{\text{st}}$ parameter) is retrieved using the dedicated
+		API \texttt{regs\_get\_kernel\_argument} instead of accessing directly \texttt{RDI} register to enhance
+		portability of the code,
+		\item it is checked if the module belongs to the white list and if so, the remaining part is skipped
 		and the function return immediately,
-		\item it is checked if the module belongs to the black list membership and if so, the module is
-		\textbf{invalidated} and the function returns
-		immediately,
+		\item it is checked if the module belongs to the black list and if so, the module is \ul{invalidated} and the
+		function returns immediately,
 		\item the structure \texttt{monitored\_module} (sec~\ref{sec:shield}) is initialized,
-		\item the other cores are required to spin on a barrier so that the module is installed in a "single-core"
-		fashion (sec~\ref{sec:syncro}).
+		\item the other cores are required to spin on a barrier so that the module is installed in a \textit{single-core
+		fashion} (sec~\ref{sec:syncro}).
 	\end{itemize}
 
-	To invalidate a module, the data associated with the \texttt{kretprobe\_instance} is used. In particular the
-	structure associated with this probe is defined into the header file (list.~\ref{lst:krp-data}) and contains a boolean value that is
-	\texttt{true} if the module must be removed in any case after the execution of \texttt{do\_init\_module} and the
-	pointer to the \texttt{struct module}.
+	To invalidate a module, the data associated with the \texttt{kretprobe\_instance} are used. In particular the
+	structure associated with this probe is defined into the header file (list.~\ref{lst:krp-data}) and contains:
+	\begin{itemize}
+		\item a boolean value that is \texttt{true} if the module must be removed in any case after the execution of
+		\texttt{do\_init\_module},
+		\item a pointer to the \texttt{struct module} currently mounting.
+	\end{itemize}
 
 	By the way, if the \texttt{mod->init} function is executed, an hack on critical memory could occur. To avoid
-	that in the \texttt{invalid\_module} macro, pointers to \texttt{init} and \texttt{exit} function are updated to
+	that in the \texttt{invalid\_module} macro, the pointers to \texttt{init} and \texttt{exit} function are updated to
 	point to dummy functions defined into the shield module.
 
 	The post-handler of this function is \texttt{verify\_safe\_area\_mount} in which simply if necessary (i.e. the
@@ -240,29 +242,32 @@
 	same handlers, that are:
 	\begin{itemize}
 		\item the \textbf{pre-handler}, \texttt{enable\_single\_core\_execution}, in which simply the other cores are
-		required to spin on a barrier, just like done in the pre-handler of \texttt{do\_init\_module}),
-		\item the \textbf{post-handler}, \texttt{verify\_safe\_areas\_modfn}, in which simply the verification function is invoked.
+		required to spin on a barrier, just like done in the pre-handler of \texttt{do\_init\_module},
+		\item the \textbf{post-handler}, \texttt{verify\_safe\_areas\_modfn}, in which simply the verification function
+		is invoked.
 	\end{itemize}
 
 	\subsubsection{Kprobe hooked to \texttt{free\_module}}
 	Obviously all kretprobes dynamically hooked to functions inside monitored module need to be unregistered when the
 	module is unmounted (because a threat has found or simply because someone has invoked \texttt{rmmod} on it).
 
-	For this reason, a kprobe is hooked to the \texttt{free\_module} function and in the pre-handler it searches if the module to be freed is currently monitored and in this case it is removed from the list
+	For this reason, a kprobe is hooked to the \texttt{free\_module} function and in the pre-handler, if the
+	module to be freed is currently monitored it is cleaned up and removed from the list.
 
 	\subsection{\textsl{Module} component}\label{sec:module}
 	This component simply defines \texttt{init} and \texttt{cleanup} functions and also some elements for module
 	management (e.g. \texttt{module\_param}, \texttt{MODULE\_LICENSE}, \dots).
 
 	\subsection{\textsl{Safe memory} component}\label{sec:safemem}
-	\textbf{Safe memory} is one of the core components of the module. Inside, it is defined the data structure
+	This is one of the core components of the module. Inside of it, it is defined the data structure
 	\texttt{safe\_area} (list.~\ref{lst:safe-area}), which is the logical representation of the caching of the state of
 	a specific \textit{quad word} (\texttt{64 bits}) in memory.
 
 	Inside the module three different arrays of \texttt{safe\_area} structures are used:
 	\begin{itemize}
 		\item one for system call table function pointer, of size \texttt{NR\_syscalls},
-		\item one for IDT, seen as a sequence of unsigned long which implies that the size of array is evaluated as:
+		\item one for \texttt{IDT}, seen as a sequence of \texttt{unsigned long}, which implies that the size of array
+		is evaluated as:
 		\begin{equation*}
 			\dfrac{\mathtt{IDT\_ENTRIES} \cdot \mathtt{sizeof(gate\_desc)}}{\mathtt{sizeof(unsigned long)}}
 		\end{equation*}
@@ -270,8 +275,8 @@
 	\end{itemize}
 
 	One of the main functions defined in this module is \texttt{verify\_safe\_areas} used in a lot of handlers defined
-	into the \textbf{"Hooks"} component. Inside, \texttt{inspect\_sa} is called for each array to check if critical
-	memory areas have been altered. In this case:
+	into the \textsl{hooks} component. Inside, \texttt{inspect\_sa} is called for each array to check if
+	critical memory areas have been altered. In this case:
 
 	\begin{itemize}
 		\item a new threat is added to the \texttt{/sys} audit (sec.~\ref{sec:threats}),
@@ -281,7 +286,7 @@
 	\end{itemize}
 
 	\subsection{\textsl{Shield} component}\label{sec:shield}
-	Inside the \textbf{shield} component are defined two core structures for the functionality of the module:
+	Inside this component are defined two core structures for the functionality of the module:
 	\begin{itemize}
 		\item \texttt{monitored\_module} which contains metadata used to monitor the module, such as the reference to
 		the \texttt{struct module}, a boolean value used to avoid nested verifications, and two set of pointers used to
@@ -291,14 +296,14 @@
 			\item the latter links a monitored module to the kretprobes hooked to its own functions.
 		\end{itemize}
 
-		\item \texttt{module\_probe} which represents a kretprobe hooked to a specific function of the module, so
-		inside of it there are the reference to the owner (\texttt{struct monitored\_module}), the kretprobe itself and
-		finally a couple of pointers used to link all the probes related to the same module together and to the owner
-		too.
+		\item \texttt{module\_probe} which represents a \texttt{kretprobe} hooked to a specific function of the module,
+		so inside of it there are the reference to the owner (\texttt{struct monitored\_module}), the
+		\texttt{kretprobe} itself and finally a couple of pointers used to link all the probes related to the same
+		module together and to the owner too.
 	\end{itemize}
 
-	In list.~\ref{lst:shield-structs} are shown these structures and furthermore in fig..~\ref{fig:shield-structs} is
-	represented how thy are linked together.
+	In list.~\ref{lst:shield-structs} are shown these structures and furthermore in fig.~\ref{fig:shield-structs} is
+	represented how they are linked together.
 
 	\begin{figure}[!htbp]
 		\centering
@@ -307,8 +312,8 @@
 		\label{fig:shield-structs}
 	\end{figure}
 
-	Inside this component is defined also a parameter of the module, that is the \texttt{removed} variable. Moment by
-	moment is it possible to see how many modules have been detected as malicious reading the content of
+	Inside this component is defined also a parameter of the module, that is the \texttt{removed} variable. At any time
+	is it possible to see how many modules have been detected as malicious reading the content of
 	\texttt{/sys/module/mlkm\_shield/parameters/removed} pseudo-file.
 
 	An interesting function defined inside this module is \texttt{remove\_malicious\_lkm}. To remove a module you need
@@ -317,7 +322,7 @@
 	been retrieved.
 
 	\subsection{\textsl{Symbols} component}\label{sec:symbols}
-	In the \textbf{symbols} component are defined some utility functions used by other ones, such as:
+	In this component are defined some utility functions used by other ones, such as:
 	\begin{itemize}
 		\item \texttt{symbol\_lookup}, which allows you to retrieve the address of a symbol in the kernel memory space
 		specifying its name. To do this you need to use the \texttt{kallsyms\_lookup\_name} function, which is no
@@ -327,8 +332,8 @@
 		the address of the system call table. Up to version 4.4 of Linux, the search is carried out according to a
 		brute force approach, starting from the address of \texttt{the sys\_close} system call\footnote{For
 			conventional Linux Kernel builds, this address is lower than the system call table one.},
-		\item \texttt{get\_idt\_address}, which allows you to retrieve the base address of the IDT, by relying on the
-		\texttt{SIDT} instruction wrapped into the
+		\item \texttt{get\_idt\_address}, which allows you to retrieve the base address of the \texttt{IDT}, by relying
+		on the \texttt{SIDT} instruction wrapped into the
 		\href{https://elixir.bootlin.com/linux/latest/source/arch/x86/include/asm/desc.h#L223}{\texttt{store\_idt}} API
 		of the kernel
 	\end{itemize}
@@ -351,12 +356,13 @@
 	\end{figure}
 
 	To do this, first of all is defined a structure \texttt{threat} in which are contained all information printed out
-	in this file (list~\ref{lst:threats}).
+	in this pseudo-file (list~\ref{lst:threats}).
 
-	Every time that a threat is detected \texttt{insert\_new\_threat} is invoked to add an instance of \texttt{struct
+	Every time that a threat is detected, \texttt{insert\_new\_threat} is invoked to add an instance of \texttt{struct
 	threat} to the list. Since the insertion needs to be synchronized, if it happened along the thread that is
-	verifying it would cause a block which could be unwanted. For this reason the workqueue mechanism is exploited by
-	defining the \texttt{threats-sys-audit} single-threaded queue (to maintain the FIFO ordering).
+	verifying, it would cause a block which could be unwanted. For this reason the workqueue mechanism is exploited by
+	declaring the \texttt{threats-sys-audit} single-threaded queue (to maintain the FIFO ordering) nd inserting the
+	requests to add to the list inside it.
 
 	\subsection{\textsl{Machine specific (x86)} component}\label{sec:x86}
 	This component simply contains a function and a couple of macros to modify \texttt{CR0} register to enable/disable
@@ -365,7 +371,9 @@
 	\href{https://elixir.bootlin.com/linux/v5.17.3/source/arch/x86/include/asm/special_insns.h#L54}{this}
 	implementation).
 
-	As you can see by analyzing the source code, the module uses machine-specific facilities for x86, so for a possible porting to other architectures it would be necessary to define additional header files in the \texttt{asm} directory and different implementations of the API C using \texttt{\#define CONFIG\_XXX} directives.
+	As you can see by analyzing the source code, the module uses machine-specific facilities for x86, so for a possible
+	porting to other architectures it would be necessary to define additional header files in the \texttt{asm}
+	directory and different implementations of the API C using \texttt{\#define CONFIG\_XXX} directives.
 
 	\section{Module installation}
 	To install \texttt{mlkm\_shield} module it is possible to exploit rules specified inside the \texttt{Makefile}:
@@ -373,13 +381,20 @@
 		\item \terminal{\$ make} to build the module, using the \texttt{make modules} rule of \texttt{Kbuild},
 		\item \terminal{\# make install} to mount the module, using \texttt{/sbin/insmod} command,
 		\item \terminal{\$ make clean} cleanup the build output rimuove from the local working directory,
-		\item \terminal{\# make clean-all} in addition to the \terminal{\$ make clean} command, unmount the module using \texttt{/sbin/rmmod} command \ul{if this is actually mounted, using a conditional construct to avoid errors}.
+		\item \terminal{\# make clean-all} in addition to the \terminal{\$ make clean} command, unmount the module
+		using \texttt{/sbin/rmmod} command \ul{if this is actually mounted, using a conditional construct to avoid
+		errors}.
 	\end{itemize}
 
 	\section{Future development}
 	Some ideas to enhance the possibilities of this module to detect malicious LKM are shown below:
 	\begin{itemize}
-		\item
+		\item calculate and cache the hash of the body of each system call/interrupt handler to eventually identify hot
+		patching attempts,
+		\item cache the status of some fields of the module structure (e.g. \texttt{sect\_attrs}) and then check if
+		they remain unchanged after execution of \texttt{mod->init},
+		\item verify if the module remove itself from the linked list, because this can be a sign that it is
+		malicious (\textit{why a module needs to hide itself?})
 	\end{itemize}
 
 	\section{Source codes mentioned in the document}
@@ -408,10 +423,10 @@
 	]{../include/shield.h}
 
 	\lstinputlisting[
-		caption={\texttt{threat} struct},
+		caption={\texttt{threat} and \texttt{work\_metadata} structures},
 		label={lst:threats},
 		escapechar=,
 		firstline=28,
-		lastline=44
+		lastline=53
 	]{../include/threats.h}
 \end{document}
