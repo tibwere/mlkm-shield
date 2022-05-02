@@ -13,7 +13,7 @@ MNTD = $(shell /usr/bin/lsmod | /usr/bin/grep $(MODN))
 build:
 	$(MAKE) -C $(KDIR) M=$(PWD) modules
 install:
-	insmod $(MODN).ko
+	/sbin/insmod $(MODN).ko
 
 .PHONY: clean clean-all
 
@@ -22,6 +22,6 @@ clean:
 
 clean-all: clean
 ifneq ($(MNTD),)
-	rmmod $(MODN)
+	/sbin/rmmod $(MODN)
 endif
 
