@@ -18,33 +18,22 @@
 
 
 /**
- * kretprobe_private_data_fn - the structure is used to pass data from
- * the pre to the post handler of a kretprobe. Using the boolean variable
- * contained within in combination with the under_analysis member of the
- * monitored_module structure, it is possible to prevent nested analyzes
- * from starting
- *
- * @member do_verification: true if the function is the outermost,
- *                         false if it is invoked by another that is
- *                         already part of a test
- */
-struct kretprobe_private_data_fn {
-        bool do_verification;
-};
-
-
-/**
- * kretprobe_private_data_ins - this structure allows the realization of
+ * krp_do_init_module_data - this structure allows the realization of
  * the forced disassembly mechanism of a module present in the blacklist
  * as soon as the do_init_mount function ends (the init function of the
  * module is previously modified to point to a dummy).
  *
  * @member remove_anyway:        true if the module is in the black list
- * @member module_to_be_removed: pointer to module to be removed
+ * @member union
+ *      - module_to_be_removed:  pointer to module to be removed
+ *      - the_mm:                pointer to the monitored_module
  */
-struct kretprobe_private_data_ins {
+struct krp_do_init_module_data {
         bool remove_anyway;
-        struct module *module_to_be_removed;
+        union {
+                struct module *module_to_be_removed;
+                struct monitored_module *the_mm;
+        };
 };
 
 
@@ -54,7 +43,7 @@ extern struct kprobe free_module_kprobe;
 
 
 /* Prototypes */
-int  attach_kretprobe_on_each_symbol(void);
+bool attach_kretprobe_on_each_symbol(struct monitored_module *mm);
 void remove_probes_from(struct monitored_module *mm);
 
 #endif // !_MLKM_SHIELD_HOOKS_H

@@ -180,7 +180,7 @@ void verify_safe_areas(struct monitored_module *the_module, bool need_to_attach)
                         good = false;
         }
 
-        if (good && need_to_attach && attach_kretprobe_on_each_symbol()) {
+        if (good && need_to_attach && !attach_kretprobe_on_each_symbol(the_module)) {
                 pr_warn(KBUILD_MODNAME ": some symbol cannot be hooked, so this module cannot be monitored -> BAN");
                 remove_malicious_lkm(the_module);
         } else {

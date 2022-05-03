@@ -26,12 +26,6 @@ LIST_HEAD(monitored_modules_list);
 
 
 /**
- * curr_module - address associated with the module being mounted metadata
- */
-struct monitored_module *curr_module;
-
-
-/**
  * free_module: function pointer of free_module not exposed to LKMs
  */
 free_module_t free_module;

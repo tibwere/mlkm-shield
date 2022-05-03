@@ -72,8 +72,7 @@ static struct monitored_module * get_monitored_module_from_kretprobe_instance(st
  */
 static int verify_safe_areas_mount(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
-        struct kretprobe_private_data_ins *data;
-        data = (struct kretprobe_private_data_ins *)ri->data;
+        struct krp_do_init_module_data *data = (struct krp_do_init_module_data *)ri->data;
 
         /* The module is in black list */
         if (unlikely(data->remove_anyway)) {
@@ -82,11 +81,10 @@ static int verify_safe_areas_mount(struct kretprobe_instance *ri, struct pt_regs
         }
 
         /* The module is in white list */
-        if (unlikely(curr_module == NULL))
+        if (unlikely(data->the_mm == NULL))
                 return 0;
 
-        verify_safe_areas(curr_module, true);
-        curr_module = NULL;
+        verify_safe_areas(data->the_mm, true);
 
         return 0;
 }
@@ -104,11 +102,7 @@ static int verify_safe_areas_mount(struct kretprobe_instance *ri, struct pt_regs
  */
 static int verify_safe_areas_modfn(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
-        struct kretprobe_private_data_fn *data;
-        data = (struct kretprobe_private_data_fn *)ri->data;
-
-        if (data->do_verification)
-                verify_safe_areas(get_monitored_module_from_kretprobe_instance(ri), false);
+        verify_safe_areas(get_monitored_module_from_kretprobe_instance(ri), false);
         return 0;
 }
 
@@ -170,10 +164,10 @@ static int start_monitoring_module(struct kretprobe_instance *ri, struct pt_regs
 {
         struct monitored_module *the_monitored_module;
         struct module *module_to_be_inserted;
-        struct kretprobe_private_data_ins *data;
+        struct krp_do_init_module_data *data;
 
         module_to_be_inserted = ((struct module *)regs_get_kernel_argument(regs, 0));
-        data = (struct kretprobe_private_data_ins *)ri->data;
+        data = (struct krp_do_init_module_data *)ri->data;
 
         if (unlikely(is_in_white_list(module_to_be_inserted->name))) {
                 pr_debug(KBUILD_MODNAME ": the module \"%s\" is inside the white list so it will not be monitored",
@@ -203,10 +197,10 @@ static int start_monitoring_module(struct kretprobe_instance *ri, struct pt_regs
         sync_master();
         the_monitored_module->under_analysis = true;
         data->remove_anyway = false;
+        data->the_mm = the_monitored_module;
 
-        curr_module = the_monitored_module;
         pr_debug(KBUILD_MODNAME ": module \"%s\" (@ %#018lx) installation is taking place on CPU core %d",
-                curr_module->module->name, (unsigned long)curr_module->module->name, smp_processor_id());
+                module_to_be_inserted->name, (unsigned long)the_monitored_module->module, smp_processor_id());
 
 out:
         return 0;
@@ -231,13 +225,10 @@ static int enable_single_core_execution(struct kretprobe_instance *ri, struct pt
         krp = get_kretprobe(ri);
         mm = get_monitored_module_from_kretprobe_instance(ri);
 
-        if (mm->under_analysis) {
-                data->do_verification = false;
-                return 0;
-        }
+        if (mm->under_analysis)
+                return -EAGAIN;
 
         mm->under_analysis = true;
-        data->do_verification = true;
 
         pr_info(KBUILD_MODNAME ": function \"%s\" in module \"%s\" has invoked", krp->kp.symbol_name, mm->module->name);
         sync_master();
@@ -252,7 +243,7 @@ static int enable_single_core_execution(struct kretprobe_instance *ri, struct pt
  * @param symbol_name: name of the symbol to be hooked
  * @return             0 if ok, -E otherwise
  */
-static int attach_kretprobe_on(const char *symbol_name)
+static int attach_kretprobe_on(struct monitored_module *mm, const char *symbol_name)
 {
         struct module_probe *mp;
 
@@ -262,22 +253,21 @@ static int attach_kretprobe_on(const char *symbol_name)
                 return -ENOMEM;
         }
 
-        mp->owner = curr_module;
+        mp->owner = mm;
         (mp->probe).kp.symbol_name = symbol_name;
         (mp->probe).entry_handler = enable_single_core_execution;
         (mp->probe).handler = verify_safe_areas_modfn;
-        (mp->probe).data_size = sizeof(struct kretprobe_private_data_fn);
 
         if(register_kretprobe(&(mp->probe))) {
                 pr_debug(KBUILD_MODNAME ": impossibile to hook \"%s\" (module: \"%s\")",
-                         symbol_name, curr_module->module->name);
+                        symbol_name, mm->module->name);
 
                 return -EINVAL;
         }
 
-        list_add(&(mp->links), &(curr_module->probes));
+        list_add(&(mp->links), &(mm->probes));
         pr_debug(KBUILD_MODNAME ": kretprobe successfully attached to \"%s\" (module: \"%s\")",
-                symbol_name, curr_module->module->name);
+                symbol_name, mm->module->name);
         return 0;
 }
 
@@ -286,30 +276,31 @@ static int attach_kretprobe_on(const char *symbol_name)
  * attach_kretprobe_on - function used to iterate inside the ELF looking for
  * the functions defined in it to hook a kretprobe to each one
  *
- * @return 0 if ok, -E otherwise
+ * @return true if ok, false otherwise
  */
-int attach_kretprobe_on_each_symbol(void)
+bool attach_kretprobe_on_each_symbol(struct monitored_module *mm)
 {
-        int i, fail;
+        int i;
+        bool ok;
         const Elf_Sym *sym;
         const char *symbol_name;
         struct mod_kallsyms *kallsyms;
 
-        fail = 0;
-        kallsyms = curr_module->module->kallsyms;
-        for (i = 0; i < kallsyms->num_symtab; ++i) {
+        ok = true;
+        kallsyms = mm->module->kallsyms;
+        for (i = 0; i < kallsyms->num_symtab && ok; ++i) {
                 sym = &(kallsyms->symtab[i]);
                 symbol_name = kallsyms->strtab + kallsyms->symtab[i].st_name;
                 if (ELF64_ST_TYPE(sym->st_info) == STT_FUNC) {
                         pr_debug(KBUILD_MODNAME ": in the module \"%s\" the function \"%s\" was found",
-                                 curr_module->module->name, symbol_name);
+                                 mm->module->name, symbol_name);
 
-                        if (attach_kretprobe_on(symbol_name) != 0)
-                                fail = 1;
+                        if (attach_kretprobe_on(mm, symbol_name) != 0)
+                                ok = false;
                 }
         }
 
-        return fail;
+        return ok;
 }
 
 
@@ -341,7 +332,7 @@ void remove_probes_from(struct monitored_module *mm)
 struct kretprobe do_init_module_kretprobe = {
         .entry_handler       = start_monitoring_module,
         .handler             = verify_safe_areas_mount,
-        .data_size           = sizeof(struct kretprobe_private_data_ins),
+        .data_size           = sizeof(struct krp_do_init_module_data),
 };
 
 
