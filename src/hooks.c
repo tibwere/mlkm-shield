@@ -172,14 +172,14 @@ static int start_monitoring_module(struct kretprobe_instance *ri, struct pt_regs
         if (unlikely(is_in_white_list(module_to_be_inserted->name))) {
                 pr_debug(KBUILD_MODNAME ": the module \"%s\" is inside the white list so it will not be monitored",
                         module_to_be_inserted->name);
-                goto out;
+                return 0;
         }
 
         if (unlikely(is_in_black_list(module_to_be_inserted->name))) {
                 pr_debug(KBUILD_MODNAME ": the module \"%s\" is in the black list so it will not be mounted",
                         module_to_be_inserted->name);
                 invalid_module(module_to_be_inserted, data);
-                goto out;
+                return 0;
         }
 
         the_monitored_module = (struct monitored_module *)kzalloc(sizeof(struct monitored_module), GFP_KERNEL);
@@ -187,7 +187,7 @@ static int start_monitoring_module(struct kretprobe_instance *ri, struct pt_regs
                 pr_debug(KBUILD_MODNAME ": unable to allocate memory for module \"%s\" monitoring",
                         module_to_be_inserted->name);
                 invalid_module(module_to_be_inserted, data);
-                goto out;
+                return 0;
         }
 
         the_monitored_module->module = module_to_be_inserted;
@@ -202,7 +202,6 @@ static int start_monitoring_module(struct kretprobe_instance *ri, struct pt_regs
         pr_debug(KBUILD_MODNAME ": module \"%s\" (@ %#018lx) installation is taking place on CPU core %d",
                 module_to_be_inserted->name, (unsigned long)the_monitored_module->module, smp_processor_id());
 
-out:
         return 0;
 }
 
