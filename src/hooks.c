@@ -254,7 +254,7 @@ static int start_monitoring_module(struct kretprobe_instance *ri, struct pt_regs
                 data->what_to_do = DONT_REMOVE;
                 data->monitored_module = the_monitored_module;
                 pr_info(KBUILD_MODNAME ": no threats found");
--        } else {
+        } else {
                 invalid_monitored_module(the_monitored_module, data);
         }
 
