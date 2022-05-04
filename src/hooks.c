@@ -260,7 +260,6 @@ static int start_monitoring_module(struct kretprobe_instance *ri, struct pt_regs
         data->remove_anyway = false;
         data->monitored_module = the_monitored_module;
 
-        /* Require single core execution */
         acquire_barrier();
 
         /*
