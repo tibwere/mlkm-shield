@@ -96,7 +96,7 @@ static int __init mlkm_shield_init(void)
         if (initialize_memory_protection())
                 return -ENOMEM;
 
-        mutex_init(&barrier);
+        spin_lock_init(&barrier);
 
         free_module = (free_module_t)symbol_lookup("free_module");
         if (unlikely(free_module == NULL)) {

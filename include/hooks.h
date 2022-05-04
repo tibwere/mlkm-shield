@@ -38,7 +38,7 @@ struct krp_do_init_module_data {
 /* Variables declaration */
 extern struct kretprobe do_init_module_kretprobe;
 extern struct kprobe free_module_kprobe;
-extern struct mutex barrier;
+extern spinlock_t barrier;
 
 
 /* Prototypes */

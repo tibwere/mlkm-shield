@@ -16,6 +16,7 @@
 #include <linux/list.h>
 #include <linux/string.h>
 #include <linux/slab.h>
+#include <linux/spinlock.h>
 #include "hooks.h"
 #include "safemem.h"
 #include "shield.h"
@@ -23,15 +24,15 @@
 
 
 /**
- * barrier - Mutex used to avoid that more than one
+ * barrier - spinlock used to avoid that more than one
  * function defined inside monitored modules
  * can run simultaneously.
  */
-struct mutex barrier;
+spinlock_t barrier;
 
 
 /**
- * dummy_init - Dummy init function for modules:
+ * dummy_init - dummy init function for modules:
  *      - that are inside the blacklist,
  *      - for which it was not possible to allocate the data
  *        structures for monitoring
@@ -40,7 +41,7 @@ static int dummy_init(void) {return 0;}
 
 
 /**
- * dummy_cleanup - Dummy cleanup function for modules:
+ * dummy_cleanup - dummy cleanup function for modules:
  *      - that are inside the blacklist,
  *      - for which it was not possible to allocate the data
  *        structures for monitoring
@@ -60,15 +61,13 @@ static inline void acquire_barrier(const char *module_name, const char *function
 {
         pr_info(KBUILD_MODNAME ": function \"%s\" (module \"%s\") will start after that the other modules to finish running",
                 function_name, module_name);
-        preempt_disable();
-        mutex_lock(&barrier);
+        spin_lock(&barrier);
         pr_info(KBUILD_MODNAME ": function \"%s\" (module \"%s\") can now start execute", function_name, module_name);
 }
 
 
 /**
- * release_barrier - function that simply release the barrier and then
- * restore the preemption counter
+ * release_barrier - function that simply release the barrier
  *
  * @param module_name:   name of the module that wants to release the barrier
  * @param function_name: name of the function that has finished the execution
@@ -77,8 +76,7 @@ static inline void release_barrier(const char *module_name, const char *function
 {
         pr_info(KBUILD_MODNAME ": function \"%s\" (module \"%s\") has finished to run, so normal execution is restored",
                 function_name, module_name);
-        mutex_unlock(&barrier);
-        preempt_enable();
+        spin_unlock(&barrier);
 }
 
 
