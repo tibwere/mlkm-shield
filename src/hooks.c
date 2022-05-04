@@ -52,23 +52,31 @@ static void dummy_cleanup(void) {}
  * acquire_barrier - function that once it returns allows
  * the module to execute in an atomic manner with respect
  * to the other modules monitored in the system
+ *
+ * @param module_name:   name of the module that wants to acquire the barrier
+ * @param function_name: name of the function that is about to execute
  */
-static inline void acquire_barrier(void)
+static inline void acquire_barrier(const char *module_name, const char *function_name)
 {
-        pr_info(KBUILD_MODNAME ": waiting for the other modules to finish running");
+        pr_info(KBUILD_MODNAME ": function \"%s\" (module \"%s\") will start after that the other modules to finish running",
+                function_name, module_name);
         preempt_disable();
         mutex_lock(&barrier);
-        pr_info(KBUILD_MODNAME ": from now on the module will execute isolated respect to other monitored ones");
+        pr_info(KBUILD_MODNAME ": function \"%s\" (module \"%s\") can now start execute", function_name, module_name);
 }
 
 
 /**
  * release_barrier - function that simply release the barrier and then
  * restore the preemption counter
+ *
+ * @param module_name:   name of the module that wants to release the barrier
+ * @param function_name: name of the function that has finished the execution
  */
-static inline void release_barrier(void)
+static inline void release_barrier(const char *module_name, const char *function_name)
 {
-        pr_info(KBUILD_MODNAME ": functions inside the module have finished to run, so normal execution is restored");
+        pr_info(KBUILD_MODNAME ": function \"%s\" (module \"%s\") has finished to run, so normal execution is restored",
+                function_name, module_name);
         mutex_unlock(&barrier);
         preempt_enable();
 }
@@ -127,7 +135,7 @@ static int verify_after_module_installation(struct kretprobe_instance *ri, struc
 
         pr_info(KBUILD_MODNAME ": no threat detected");
         data->monitored_module->under_analysis = false;
-        release_barrier();
+        release_barrier(data->monitored_module->module->name, "mod->init");
         return 0;
 }
 
@@ -154,7 +162,7 @@ static int verify_after_function_execution(struct kretprobe_instance *ri, struct
 
         the_monitored_module->under_analysis = false;
         pr_info(KBUILD_MODNAME ": no threat detected");
-        release_barrier();
+        release_barrier(the_monitored_module->module->name, get_kretprobe(ri)->kp.symbol_name);
 
         return 0;
 }
@@ -261,7 +269,7 @@ static int start_monitoring_module(struct kretprobe_instance *ri, struct pt_regs
         data->remove_anyway = false;
         data->monitored_module = the_monitored_module;
 
-        acquire_barrier();
+        acquire_barrier(module_to_be_inserted->name, "mod->init");
 
         /*
          * Avoid using mutex lock to syncronize the insertion
@@ -299,7 +307,7 @@ static int enable_single_core_execution(struct kretprobe_instance *ri, struct pt
 
         mm->under_analysis = true;
 
-        acquire_barrier();
+        acquire_barrier(mm->module->name, krp->kp.symbol_name);
         pr_info(KBUILD_MODNAME ": function \"%s\" in module \"%s\" has invoked", krp->kp.symbol_name, mm->module->name);
         return 0;
 }
