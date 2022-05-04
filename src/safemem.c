@@ -18,7 +18,6 @@
 #include "config.h"
 #include "hooks.h"
 #include "asm/x86.h"
-#include "syncro.h"
 #include "shield.h"
 #include "symbols.h"
 #include "threats.h"

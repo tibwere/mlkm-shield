@@ -18,33 +18,16 @@
 
 
 /**
- * post_do_init_module_activities - enumeration of possibile activities
- * to do after do_init_module is executed.
- *
- * - REMOVE_MODULE:           the module must be removed invoking on it
- *                            free_module function
- * - REMOVE_MONITORED_MODULE: the monitored_module must be removed invoking on
- *                            it remove_malicious_lkm function
- * - DONT_REMOVE:             a kretprobe is attached to each function inside
- *                            the module
- */
-enum post_do_init_module_activities {
-        REMOVE_MONITORED_MODULE,
-        REMOVE_MODULE,
-        DONT_REMOVE,
-};
-
-
-/**
  * krp_do_init_module_data - this structure allows to pass information from
- * pre-handler to post-handler of do_init_module. Depending on what_to_do field
- * the union field take a different semantic.
+ * pre-handler to post-handler of do_init_module.
+ * In particular if remove_anyway is true, the module is freed up, instead
+ * start verification phase
  *
- * @member remove_anyway: true if the module is in the black list
+ * @member remove_anyway: true if the module must be removed
  * @member union:         module or monitored_module pointer
  */
 struct krp_do_init_module_data {
-        enum post_do_init_module_activities what_to_do;
+        bool remove_anyway;
         union {
                 struct module *module;
                 struct monitored_module *monitored_module;
@@ -55,6 +38,7 @@ struct krp_do_init_module_data {
 /* Variables declaration */
 extern struct kretprobe do_init_module_kretprobe;
 extern struct kprobe free_module_kprobe;
+extern struct mutex barrier;
 
 
 /* Prototypes */

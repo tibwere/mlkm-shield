@@ -19,8 +19,24 @@
 #include "hooks.h"
 #include "safemem.h"
 #include "shield.h"
-#include "syncro.h"
 #include "bwlist.h"
+
+
+/**
+ * barrier - Mutex used to avoid that more than one
+ * function defined inside monitored modules
+ * can run simultaneously.
+ */
+struct mutex barrier;
+
+
+/**
+ * dummy_init - Dummy init function for modules:
+ *      - that are inside the blacklist,
+ *      - for which it was not possible to allocate the data
+ *        structures for monitoring
+ */
+static int dummy_init(void) {return 0;}
 
 
 /**
@@ -30,6 +46,31 @@
  *        structures for monitoring
  */
 static void dummy_cleanup(void) {}
+
+
+/**
+ * acquire_barrier - function that once it returns allows
+ * the module to execute in an atomic manner with respect
+ * to the other modules monitored in the system
+ */
+static inline void acquire_barrier(void)
+{
+        pr_info(KBUILD_MODNAME ": waiting for the other modules to finish running");
+        preempt_disable();
+        mutex_lock(&barrier);
+        pr_info(KBUILD_MODNAME ": from now on the module will execute atomically");
+}
+
+
+/**
+ * release_barrier - function that simply release the barrier and then
+ * restore the preemption counter
+ */
+static inline void release_barrier(void)
+{
+        mutex_unlock(&barrier);
+        preempt_enable();
+}
 
 
 /**
@@ -51,37 +92,47 @@ static struct monitored_module * get_monitored_module_from_kretprobe_instance(st
 
 
 /**
- * remove_module_if_necessary - post-handler of the do_init_module function
- * in which depending on the what_to_do field
- *      - the module is freed up (REMOVE_MODULE)
- *      - the monitored_module is removed (REMOVE_MONITORED_MODULE)
- *      - kretprobe are attached to each symbol (DONT_REMOVE)
+ * verify_after_module_installation - post-handler of the do_init_module
+ * function in which:
+ *      - the module is removed if blacklisted or its monitoring structures
+ *        cannot be allocated
+ *      - the memory areas are checked
+ *      - finally if ok, all function inside the module are hooked up
  *
  * @param ri:   used to retrieve data associated with kretprobe
  * @param regs: not used
  * @return:     always 0
  */
-static int remove_module_if_necessary(struct kretprobe_instance *ri, struct pt_regs *regs)
+static int verify_after_module_installation(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
         struct krp_do_init_module_data *data = (struct krp_do_init_module_data *)ri->data;
 
-        if (data->what_to_do == REMOVE_MODULE) {
+        if (unlikely(data->remove_anyway)) {
+                pr_info("SONO QUI");
                 free_module(data->module);
-        } else if (data->what_to_do == REMOVE_MONITORED_MODULE) {
-                remove_malicious_lkm(data->monitored_module);
-        } else {
-                if (!attach_kretprobe_on_each_symbol(data->monitored_module)) {
-                        pr_warn(KBUILD_MODNAME ": some symbol cannot be hooked, so this module cannot be monitored");
-                        remove_malicious_lkm(data->monitored_module);
-                }
+                return 0;
         }
 
+        if (unlikely(!verify_safe_areas(data->monitored_module))) {
+                remove_malicious_lkm(data->monitored_module);
+                return 0;
+        }
+
+        if (unlikely(!attach_kretprobe_on_each_symbol(data->monitored_module))) {
+                pr_warn(KBUILD_MODNAME ": some symbol cannot be hooked, so this module cannot be monitored and therefore it will be removed");
+                remove_malicious_lkm(data->monitored_module);
+                return 0;
+        }
+
+        pr_info(KBUILD_MODNAME ": no threat detected");
+        data->monitored_module->under_analysis = false;
+        release_barrier();
         return 0;
 }
 
 
 /**
- *  verify_after_function_execution - post-handler of each function defined
+ * verify_after_function_execution - post-handler of each function defined
  * in the various modules in which verify_safe_areas is invoked
  * for the actual verification passing the reference to the metadata
  * structure using the appropriate function and finally multi-core execution
@@ -95,15 +146,15 @@ static int verify_after_function_execution(struct kretprobe_instance *ri, struct
 {
         struct monitored_module *the_monitored_module = get_monitored_module_from_kretprobe_instance(ri);
 
-        if (likely(verify_safe_areas(the_monitored_module))) {
-                the_monitored_module->under_analysis = false;
-                pr_info(KBUILD_MODNAME ": no threat detected");
-        } else {
+        if (unlikely(!verify_safe_areas(the_monitored_module))) {
                 remove_malicious_lkm(the_monitored_module);
+                return 0;
         }
 
-        atomic_set(&sync_leave, 0);
-        preempt_enable();
+        the_monitored_module->under_analysis = false;
+        pr_info(KBUILD_MODNAME ": no threat detected");
+        release_barrier();
+
         return 0;
 }
 
@@ -145,24 +196,10 @@ static int stop_monitoring_module(struct kprobe *kp, struct pt_regs *regs)
  */
 #define invalid_module(m, krp_data)             \
 ({                                              \
+        (m)->init = dummy_init;                 \
         (m)->exit = dummy_cleanup;              \
-        (krp_data)->what_to_do = REMOVE_MODULE; \
+        (krp_data)->remove_anyway = true;       \
         (krp_data)->module = (m);               \
-})
-
-
-/**
- * invalid_monitored_module - macro used to request the removal
- * of a monitored module in the post handler
- *
- * @param mm      : monitored module to be invalidated
- * @param krp_data: data associated with kretprobe
- */
-#define invalid_monitored_module(mm, krp_data)                  \
-({                                                              \
-        (mm)->module->exit = dummy_cleanup;                     \
-        (krp_data)->what_to_do = REMOVE_MONITORED_MODULE;       \
-        (krp_data)->monitored_module = (mm);                    \
 })
 
 
@@ -170,13 +207,11 @@ static int stop_monitoring_module(struct kprobe *kp, struct pt_regs *regs)
  * start_monitoring_module - pre-handler of do_init_module function in which:
  *      - it is checked whether the module belongs to the black/white lists or not
  *      - data structures for monitoring are initialized
- *      - the execution of mod->init is anticipated in single-core modality to avoid
- *        deadlock caused by irq stuff inside do_init_module function
- *      - it is checked whether the critical memory areas have been modified or not
+ *      - the barrier is acquired to isolated execution
  *
  * @param ri:   used to retrieve data associated with kretprobe_instance
- * @param regs: used to retrieve first parameter
- *              (in x86_64 convention first parameter is stored in RDI register)
+ * @param regs: used to retrieve first parameter (in x86_64 convention
+ *              first parameter is stored in RDI register)
  * @return:     always 0
  */
 static int start_monitoring_module(struct kretprobe_instance *ri, struct pt_regs *regs)
@@ -184,7 +219,6 @@ static int start_monitoring_module(struct kretprobe_instance *ri, struct pt_regs
         struct monitored_module *the_monitored_module;
         struct module *module_to_be_inserted;
         struct krp_do_init_module_data *data;
-        int (*saved_init)(void);
 
         /* Initialiaze module and additional data struct */
         module_to_be_inserted = ((struct module *)regs_get_kernel_argument(regs, 0));
@@ -195,13 +229,8 @@ static int start_monitoring_module(struct kretprobe_instance *ri, struct pt_regs
                 pr_debug(KBUILD_MODNAME ": the module \"%s\" is inside the white list so it will not be monitored",
                         module_to_be_inserted->name);
 
-                data->what_to_do = DONT_REMOVE;
-                return 0;
+                return -EINVAL;
         }
-
-        /* Save original init function and replace it with NULL */
-        saved_init = module_to_be_inserted->init;
-        module_to_be_inserted->init = NULL;
 
         /* Verify if the module is in black list */
         if (unlikely(is_in_black_list(module_to_be_inserted->name))) {
@@ -227,8 +256,12 @@ static int start_monitoring_module(struct kretprobe_instance *ri, struct pt_regs
         the_monitored_module->under_analysis = true;
         INIT_LIST_HEAD(&(the_monitored_module->probes));
 
+        /* Inizialize fields of the additional data structure */
+        data->remove_anyway = false;
+        data->monitored_module = the_monitored_module;
+
         /* Require single core execution */
-        sync_master();
+        acquire_barrier();
 
         /*
          * Avoid using mutex lock to syncronize the insertion
@@ -239,39 +272,13 @@ static int start_monitoring_module(struct kretprobe_instance *ri, struct pt_regs
         pr_debug(KBUILD_MODNAME ": module \"%s\" (@ %#018lx) installation is taking place on CPU core %d",
                 module_to_be_inserted->name, (unsigned long)the_monitored_module->module, smp_processor_id());
 
-        /*
-         * Exec original init function
-         * the execution is anticipated because inside do_init_module
-         * there are problems with IPI
-         * */
-        saved_init();
-
-        /*
-         * Verify safe areas status. If changed request to remove monitored_module
-         * in the post-handler
-         */
-        if (likely(verify_safe_areas(the_monitored_module))) {
-                data->what_to_do = DONT_REMOVE;
-                data->monitored_module = the_monitored_module;
-                pr_info(KBUILD_MODNAME ": no threats found");
-        } else {
-                invalid_monitored_module(the_monitored_module, data);
-        }
-
-        /* Restore normal activity of other cores */
-        atomic_set(&sync_leave, 0);
-        preempt_enable();
-
-        /* The analysis is finished */
-        the_monitored_module->under_analysis = false;
-
         return 0;
 }
 
 
 /**
  * enable_single_core_execution - pre-handler of each function defined in the various
- * modules in which 'single core' execution is required
+ * modules in which the barrier is acquired
  *
  * @param ri:   used to retrieve data associated with kretprobe
  * @param regs: not used
@@ -292,8 +299,8 @@ static int enable_single_core_execution(struct kretprobe_instance *ri, struct pt
 
         mm->under_analysis = true;
 
+        acquire_barrier();
         pr_info(KBUILD_MODNAME ": function \"%s\" in module \"%s\" has invoked", krp->kp.symbol_name, mm->module->name);
-        sync_master();
         return 0;
 }
 
@@ -393,7 +400,7 @@ void remove_probes_from(struct monitored_module *mm)
  */
 struct kretprobe do_init_module_kretprobe = {
         .entry_handler       = start_monitoring_module,
-        .handler             = remove_module_if_necessary,
+        .handler             = verify_after_module_installation,
         .data_size           = sizeof(struct krp_do_init_module_data),
 };
 

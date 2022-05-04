@@ -96,6 +96,8 @@ static int __init mlkm_shield_init(void)
         if (initialize_memory_protection())
                 return -ENOMEM;
 
+        mutex_init(&barrier);
+
         free_module = (free_module_t)symbol_lookup("free_module");
         if (unlikely(free_module == NULL)) {
                 pr_info(KBUILD_MODNAME ": free_module symbol not found so it would be impossibile to remove module if necessary");
