@@ -44,9 +44,9 @@ void sync_worker(void *info)
         pr_debug(KBUILD_MODNAME ": core %d wait until verification is completed", cpuid);
 
         atomic_dec(&sync_enter);
-        // preempt_disable();
-        // while(atomic_read(&sync_leave) > 0);
-        // preempt_enable();
+        preempt_disable();
+        while(atomic_read(&sync_leave) > 0);
+        preempt_enable();
 
         pr_debug(KBUILD_MODNAME ": core %d resumes work left earlier", cpuid);
 }

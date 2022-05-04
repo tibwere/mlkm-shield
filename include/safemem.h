@@ -52,7 +52,7 @@ extern size_t num_additional_symbols;
  */
 void          cache_additional_symbols_mem_area(void);
 int           cache_mem_area(const char *audit, unsigned long *start_address, int length, int index);
-void          verify_safe_areas(struct monitored_module *the_module, bool need_to_attach);
+bool          verify_safe_areas(struct monitored_module *the_module);
 inline void   revert_to_good_state(struct safe_area *a);
 inline size_t count_additional_symbols(void);
 

@@ -165,7 +165,7 @@ static bool inspect_sa(struct module *module, struct safe_area *sa, int length)
  * @param need_to_attach: true if the function is called from do_init_module kretprobe,
  *                        false otherwise
  */
-void verify_safe_areas(struct monitored_module *the_module, bool need_to_attach)
+bool verify_safe_areas(struct monitored_module *the_module)
 {
         int i;
         bool good = true;
@@ -180,16 +180,7 @@ void verify_safe_areas(struct monitored_module *the_module, bool need_to_attach)
                         good = false;
         }
 
-        if (good && need_to_attach && !attach_kretprobe_on_each_symbol(the_module)) {
-                pr_warn(KBUILD_MODNAME ": some symbol cannot be hooked, so this module cannot be monitored -> BAN");
-                remove_malicious_lkm(the_module);
-        } else {
-                the_module->under_analysis = false;
-                likely(good) ? pr_info(KBUILD_MODNAME ": no threat detected") : remove_malicious_lkm(the_module);
-        }
-
-        atomic_set(&sync_leave, 0);
-        preempt_enable();
+        return good;
 }
 
 

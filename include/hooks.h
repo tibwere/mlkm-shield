@@ -18,21 +18,36 @@
 
 
 /**
- * krp_do_init_module_data - this structure allows the realization of
- * the forced disassembly mechanism of a module present in the blacklist
- * as soon as the do_init_mount function ends (the init function of the
- * module is previously modified to point to a dummy).
+ * post_do_init_module_activities - enumeration of possibile activities
+ * to do after do_init_module is executed.
  *
- * @member remove_anyway:        true if the module is in the black list
- * @member union
- *      - module_to_be_removed:  pointer to module to be removed
- *      - the_mm:                pointer to the monitored_module
+ * - REMOVE_MODULE:           the module must be removed invoking on it
+ *                            free_module function
+ * - REMOVE_MONITORED_MODULE: the monitored_module must be removed invoking on
+ *                            it remove_malicious_lkm function
+ * - DONT_REMOVE:             a kretprobe is attached to each function inside
+ *                            the module
+ */
+enum post_do_init_module_activities {
+        REMOVE_MONITORED_MODULE,
+        REMOVE_MODULE,
+        DONT_REMOVE,
+};
+
+
+/**
+ * krp_do_init_module_data - this structure allows to pass information from
+ * pre-handler to post-handler of do_init_module. Depending on what_to_do field
+ * the union field take a different semantic.
+ *
+ * @member remove_anyway: true if the module is in the black list
+ * @member union:         module or monitored_module pointer
  */
 struct krp_do_init_module_data {
-        bool remove_anyway;
+        enum post_do_init_module_activities what_to_do;
         union {
-                struct module *module_to_be_removed;
-                struct monitored_module *the_mm;
+                struct module *module;
+                struct monitored_module *monitored_module;
         };
 };
 
