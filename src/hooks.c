@@ -58,7 +58,7 @@ static inline void acquire_barrier(void)
         pr_info(KBUILD_MODNAME ": waiting for the other modules to finish running");
         preempt_disable();
         mutex_lock(&barrier);
-        pr_info(KBUILD_MODNAME ": from now on the module will execute atomically");
+        pr_info(KBUILD_MODNAME ": from now on the module will execute isolated respect to other monitored ones");
 }
 
 
@@ -68,6 +68,7 @@ static inline void acquire_barrier(void)
  */
 static inline void release_barrier(void)
 {
+        pr_info(KBUILD_MODNAME ": functions inside the module have finished to run, so normal execution is restored");
         mutex_unlock(&barrier);
         preempt_enable();
 }
