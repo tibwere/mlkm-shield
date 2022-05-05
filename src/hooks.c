@@ -292,7 +292,6 @@ static int start_monitoring_module(struct kretprobe_instance *ri, struct pt_regs
         pr_debug(KBUILD_MODNAME ": module \"%s\" (@ %#018lx) installation is taking place",
                 module_to_be_inserted->name, (unsigned long)module_to_be_inserted);
 
-
         /* Initialize some field of the structure monitored_module */
         the_monitored_module->module = module_to_be_inserted;
         the_monitored_module->under_analysis = true;
@@ -311,10 +310,7 @@ static int start_monitoring_module(struct kretprobe_instance *ri, struct pt_regs
 
         acquire_barrier(module_to_be_inserted->name, "mod->init");
 
-        /*
-         * Avoid using mutex lock to syncronize the insertion
-         * because the code is running in single core fashion
-         */
+        /* Add monitored module struct to the list of monitored modules */
         list_add(&(the_monitored_module->links), &monitored_modules_list);
 
         return 0;
