@@ -115,7 +115,6 @@ static int verify_after_module_installation(struct kretprobe_instance *ri, struc
         struct krp_do_init_module_data *data = (struct krp_do_init_module_data *)ri->data;
 
         if (unlikely(data->remove_anyway)) {
-                pr_info("SONO QUI");
                 free_module(data->module);
                 return 0;
         }
@@ -286,7 +285,7 @@ static int start_monitoring_module(struct kretprobe_instance *ri, struct pt_regs
  * enable_single_core_execution - pre-handler of each function defined in the various
  * modules in which the barrier is acquired
  *
- * @param ri:   used to retrieve data associated with kretprobe
+ * @param ri:   used to retrieve monitored_module struct associated with kretprobe instance
  * @param regs: not used
  * @return:     always 0
  */
@@ -294,9 +293,7 @@ static int enable_single_core_execution(struct kretprobe_instance *ri, struct pt
 {
         struct kretprobe *krp;
         struct monitored_module *mm;
-        struct kretprobe_private_data_fn *data;
 
-        data = (struct kretprobe_private_data_fn *)ri->data;
         krp = get_kretprobe(ri);
         mm = get_monitored_module_from_kretprobe_instance(ri);
 
