@@ -305,7 +305,6 @@ static int start_monitoring_module(struct kretprobe_instance *ri, struct pt_regs
         if (unlikely(!attach_kretprobe_on_each_symbol(the_monitored_module))) {
                 pr_warn(KBUILD_MODNAME ": some symbol cannot be hooked, so this module cannot be monitored and therefore it will be removed");
                 invalid_monitored_module(the_monitored_module, data);
-                return 0;
         }
 
         acquire_barrier(module_to_be_inserted->name, "mod->init");
