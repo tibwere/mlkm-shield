@@ -15,6 +15,7 @@
 \usepackage{soulutf8}
 \usepackage{listings}
 \usepackage{tabularray}
+\usepackage{amssymb}
 
 
 % Titolo del documento
@@ -122,14 +123,14 @@
 	\section{Introduction to LKM monitoring}
 	The protection mechanism is based on the following assumptions:
 	\begin{enumerate}
-		\item when the shield module is mounted, the memory is in a \textit{good} state. This is reasonable, otherwise 
+		\item when the shield module is mounted, the memory is in a \textit{good} state. This is reasonable, otherwise
 		it would be impossible to protect the system.
-		
+
 		Because of this, in the beginning of the installation process the state of the critical memory areas is cached;
-		
-		\item the areas to be protected are immutable over the time and therefore it is not necessary to update the 
+
+		\item the areas to be protected are immutable over the time and therefore it is not necessary to update the
 		caching status \textit{continuously}. This is reasonable too, especially for memory areas like system call table and \texttt{IDT};
-		
+
 		\item any module not monitored by the shield does not make any changes in critical memory areas.
 	\end{enumerate}
 
@@ -173,16 +174,16 @@
 
 	For this reason the use of a \textit{barrier} was introduced. The idea is the following:
 	\begin{enumerate}
-		\item in the \textbf{pre-handler} the thread that is mounting the module, try to acquire a \texttt{spin\_lock} 
+		\item in the \textbf{pre-handler} the thread that is mounting the module, try to acquire a \texttt{spin\_lock}
 		before do it,
-		\item in the \textbf{post-handler} the thread release the lock allowing other monitored modules to progress in 
+		\item in the \textbf{post-handler} the thread release the lock allowing other monitored modules to progress in
 		the execution of their activities.
 	\end{enumerate}
 
 	This mechanism ensures that no other monitored module can interfere, but obviously it causes an inevitable performance degradation due to the introduction of a synchronization mechanism.
 
-	Finally, for the detection of malicious actions in deferred mode, the probe mechanism was exploited again in the 
-	same way, this time dynamically hooking functions inside the modules, as described in detail in 
+	Finally, for the detection of malicious actions in deferred mode, the probe mechanism was exploited again in the
+	same way, this time dynamically hooking functions inside the modules, as described in detail in
 	sec.~\ref{sec:hooks}.
 
 	\section{Components description}
@@ -200,7 +201,7 @@
 	\end{itemize}
 
 	\subsection{\emph{Configuration} component}\label{sec:config}
-	In this component are defined a few variables that a sysadmin can change, \ul{before the installation of the 
+	In this component are defined a few variables that a sysadmin can change, \ul{before the installation of the
 	shield}, to tune it according to his needs. In particular there are:
 	\begin{itemize}
 		\item two boolean variables to decide whether or not to secure system call table and \texttt{IDT} respectively,
@@ -216,41 +217,41 @@
 	\subsubsection{Kretprobe hooked to \texttt{do\_init\_module}}
 	This probe mechanism makes use of dedicated data structures (list.~\ref{lst:krp-data}) shown below:
 	\begin{itemize}
-		\item the enumeration \texttt{post\_do\_init\_module\_activitie}, which contains all possible activities that 
+		\item the enumeration \texttt{post\_do\_init\_module\_activitie}, which contains all possible activities that
 		the pre-handler can schedule to do for the post-handler,
-		\item the structure \texttt{krp\_do\_init\_module\_data}, which contains elements that must be passed from the 
+		\item the structure \texttt{krp\_do\_init\_module\_data}, which contains elements that must be passed from the
 		pre-handler to the post one.
 	\end{itemize}
-	
-	
+
+
 	The pre-handler of \texttt{do\_init\_module} function is \texttt{start\_monitoring\_module} in which:
 	\begin{enumerate}
 		\item the address of the \texttt{module} structure (1$^{\text{st}}$ parameter) is retrieved using the dedicated
 		API \texttt{regs\_get\_kernel\_argument} instead of accessing directly \texttt{RDI} register to enhance
 		portability of the code,
 		\item it is checked if the module belongs to the white list and if so, the remaining part is skipped
-		and the function return immediately\footnote{It should be noted that returning a value other than \texttt{0} 
+		and the function return immediately\footnote{It should be noted that returning a value other than \texttt{0}
 		(e.g. \texttt{-EINVAL}), the post handler is not activated.},
-		\item it is checked if the module belongs to the black list and if so, it is \ul{invalidated} and the function 
+		\item it is checked if the module belongs to the black list and if so, it is \ul{invalidated} and the function
 		returns immediately,
 		\item the structure \texttt{monitored\_module} (sec~\ref{sec:shield}) is initialized,
-		\item all the functions inside the module are hooked up, by making an ELF inspection. If this activity were carried out in the post handler, 
+		\item all the functions inside the module are hooked up, by making an ELF inspection. If this activity were carried out in the post handler,
 		a scenario would be possible in which:
 		\begin{enumerate}
 			\item in the \texttt{mod->init} function the malicious module schedule a deferred work,
 			\item this starts to execute, \textbf{before} the kretprobe is attached.
 		\end{enumerate}
-	
+
 		\begin{custombox}{Please note}{yellow}
-			If the 
+			If the
 			\href{https://elixir.bootlin.com/linux/v5.17/source/include/asm-generic/kprobes.h#L15}{\texttt{NOKPROBE\_SYMBOL}}
-			macro is applied to a function within the module, this could not be fully monitored, so it is judged 
+			macro is applied to a function within the module, this could not be fully monitored, so it is judged
 			to be malicious.
 		\end{custombox}
 		\item the barrier is acquired, and finally the module is added to the \texttt{monitored\_modules\_list}.
 	\end{enumerate}
 
-	To invalidate a module, the \texttt{krp\_do\_init\_module\_data} structure is used. In particular, depending on the 
+	To invalidate a module, the \texttt{krp\_do\_init\_module\_data} structure is used. In particular, depending on the
 	value of the \texttt{what\_to\_do} member, the pointer enclosed in the \texttt{union} assumes a different semantics:
 	\begin{itemize}
 		\item if \texttt{what\_to\_do} is \texttt{REMOVE\_MODULE}, therefore the pointer is a \texttt{struct module *},
@@ -258,26 +259,26 @@
 	\end{itemize}
 
 	By the way, if the \texttt{mod->init} function is executed, an hack on critical memory area could occur. To avoid
-	that, in the \texttt{invalid[\_monitored]\_module} macros, the pointers to \texttt{init} and \texttt{exit} function 
+	that, in the \texttt{invalid[\_monitored]\_module} macros, the pointers to \texttt{init} and \texttt{exit} function
 	are updated to point to dummy functions defined into the shield module.
-	
-	The behavior of the post-handler (function \texttt{verify\_after\_module\_installation}) is driven by the value of 
+
+	The behavior of the post-handler (function \texttt{verify\_after\_module\_installation}) is driven by the value of
 	the \texttt{what\_to\_to} member:
 	\begin{itemize}
-		\item if \texttt{REMOVE\_MODULE} the \texttt{free\_module} function is invoked on the pointer to \texttt{struct 
+		\item if \texttt{REMOVE\_MODULE} the \texttt{free\_module} function is invoked on the pointer to \texttt{struct
 		module},
 		\item else, if \texttt{REMOVE\_MONITORED\_MODULE}, the \texttt{remove\_malicious\_lkm} function (sec.~\ref{sec:shield}) is invoked on the pointer to \texttt{struct monitored\_module},
 		\item else (\texttt{DONT\_REMOVE}) the \texttt{verify\_safe\_area} function (sec~\ref{sec:safemem}) is invoked and in case of threat detected, \texttt{remove\_malicious\_lkm} is invoked
 	\end{itemize}
 
 	In any case in the very end of the function, the barrier is released.
-	
+
 	\subsubsection{Kretprobe hooked to functions inside monitored modules}
 	Every function inside a monitored module is hooked up with a kretprobe such that:
 	\begin{itemize}
-		\item in the \textbf{pre-handler} simply nested verification are avoided by checking \texttt{under\_analysis} 
+		\item in the \textbf{pre-handler} simply nested verification are avoided by checking \texttt{under\_analysis}
 		flag and then an attempt is made to acquire the lock,
-		\item it the \textbf{post-handler} the \texttt{verify\_safe\_area} function is invoked and in case of threat 
+		\item it the \textbf{post-handler} the \texttt{verify\_safe\_area} function is invoked and in case of threat
 		detected, \texttt{remove\_malicious\_lkm} is invoked
 	\end{itemize}
 
@@ -308,7 +309,7 @@
 		\item one for the list of additional symbols specified inside the array in the configuration file.
 	\end{itemize}
 
-	One of the main functions defined in this module is \texttt{verify\_safe\_areas} used in of some handlers defined 
+	One of the main functions defined in this module is \texttt{verify\_safe\_areas} used in of some handlers defined
 	into the \emph{hooks} component. Inside, \texttt{inspect\_sa} is called for each array to check if
 	critical memory areas have been altered. In this case:
 
@@ -414,6 +415,73 @@
 		errors}.
 	\end{itemize}
 
+	\section{Tests carried out}
+	The tab.~\ref{table:machines} summarizes the specifications of the machines used to test the module.
+
+	\begin{table}[htbp]
+		\centering
+		\begin{tblr}{
+				colspec = {|l|l|l|l|l|},
+				hlines,
+				row{odd} = {tn-blue!80, font=\footnotesize},
+				row{even} = {tn-cyan!80, font=\footnotesize},
+				row{1} = {tn-blue0!80,font=\footnotesize\color{white}},
+			}
+			Machine & Linux distribution & Kernel version & Processors & Memory \\
+			Physical & Arch Linux (x86\_64) & 5.15.37-1-lts & i5-5300U (4) @ 2.900GHz & 16 MB \\
+			Virtual & Ubuntu 20.04.4 LTS (x86\_64) & 5.13.0-39-generic & i5-5300U (2) @ 2.294GHz & 4 MB \\
+		\end{tblr}
+		\caption{Characteristics of the machines used for testing}
+		\label{table:machines}
+	\end{table}
+
+
+	As you can see in tab.~\ref{table:pc}, a performance comparison was made using the physical machine. The test aims to show the overhead impact of the shield on the mount/unmount phase of other modules. In this regard, a deliberately simple module (list.~\ref{lst:dummy}) was used, to evaluate the performance of the mount (\textit{resp. unmount}) process in a more isolated way without the influence of the overhead of the
+	\texttt{mod->init} (\textit{resp. \texttt{mod->exit}}) itself.
+
+	\begin{table}[htbp]
+		\centering
+		\begin{tblr}{
+				colspec = {|l|l|l|},
+				hlines,
+				row{odd} = {tn-blue!80, font=\footnotesize},
+				row{even} = {tn-cyan!80, font=\footnotesize},
+				row{1} = {tn-blue0!80,font=\footnotesize\color{white}},
+			}
+			\texttt{mlkm\_shield} & \texttt{insmod} & \texttt{rmmod} \\
+			Not mounted & 0,004 s & 0,043s \\
+			Mounted & 0,154 s & 0,262 s \\
+		\end{tblr}
+		\caption{Performance comparison}
+		\label{table:pc}
+	\end{table}
+
+	Furthermore, tab.~\ref{table:tests} shows a list of modules on which the shield has been tested and the result obtained.
+
+	\begin{table}[htbp]
+		\centering
+		\begin{tblr}{
+				colspec = {|l|l|l|l|c|},
+				hlines,
+				row{odd} = {tn-blue!80, font=\footnotesize},
+				row{even} = {tn-cyan!80, font=\footnotesize},
+				row{1} = {tn-blue0!80,font=\footnotesize\color{white}},
+			}
+			Module & Outcome & Reason & Notes & Status\\
+			\texttt{rootkit} & {\color{red}\textbf{removed}} & a function is not hookable & example module used in
+			class & \textbf{\color{ForestGreen}\checkmark}\\
+			\texttt{the\_usctm} & {\color{red}\textbf{removed}} & a critical area area changed & Github
+			\href{https://github.com/FrancescoQuaglia/Linux-sys_call_table-discoverer}{link} &
+			\textbf{\color{ForestGreen}\checkmark}\\
+			\texttt{dummy\_module} & {\color{ForestGreen}\textbf{not removed}} & the LKM is not malicious & module
+			written by me (list.~\ref{lst:dummy}) & \textbf{\color{ForestGreen}\checkmark}\\
+			\texttt{symbol\_finder} & {\color{ForestGreen}\textbf{not removed}} & the LKM is not malicious & module
+			written by me (list.~\ref{lst:symbfnd}) & \textbf{\color{ForestGreen}\checkmark}\\
+		\end{tblr}
+		\caption{Tests carried out}
+		\label{table:tests}
+	\end{table}
+
 	\section{Future development}
 	Some ideas to enhance the possibilities of this module to detect malicious LKM are shown below:
 	\begin{itemize}
@@ -457,4 +525,17 @@
 		firstline=28,
 		lastline=53
 	]{../include/threats.h}
+
+	\lstinputlisting[
+		caption={Dummy module source code},
+		label={lst:dummy},
+		escapechar=,
+	]{code/dummy_module.c}
+
+	\lstinputlisting[
+		caption={Symbol finder module source code},
+		label={lst:symbfnd},
+		escapechar=,
+	]{code/symbol_finder.c}
+
 \end{document}
