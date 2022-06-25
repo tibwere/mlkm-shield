@@ -133,11 +133,10 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 		Link to Github repository: \url{https://github.com/tibwere/mlkm-shield}
 	\end{custombox}
 
-	The project is organized into several files, each of which contains stuffs relating to certain components of the
+	The code base is divided into several files, each of which contains stuffs relating to certain components of the
 	project (e.g. hooks, \textit{machine-specific} operations, \dots).
 
-	The following sections are aimed at describing each component of the module developed, by analyzing core data
-	structures and procedures implemented, as well as the general idea behind the functioning of the module.
+	The following sections are aimed at describing each of them, by analyzing core data structures and procedures implemented, as well as the general idea behind the functioning of the module.
 
 	\section{Introduction to LKM monitoring}
 	The protection mechanism is based on the following assumptions:
@@ -157,9 +156,9 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 	The areas considered critical and therefore monitored by the shield module are:
 	\begin{itemize}
 		\item \textbf{System call table}, because a rootkit can change some function pointers within the table and thus
-		change the behavior of certain system calls,
+		change the behavior of certain system calls;
 		\item \textbf{IDT} (\textbf{I}nterrupt \textbf{D}escriptor \textbf{T}able), because a rootkit can modify
-		interrupt handlers to perform malicious activity,
+		interrupt handlers to perform malicious activity;
 		\item a list of \textbf{additional symbols} (e.g. some crypto keys) that the sysadmin can specify inside a
 		configuration file (sec.~\ref{sec:config}) before mounting the shield module.
 	\end{itemize}
@@ -221,11 +220,11 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 
 	\subsection{\emph{Configuration} component}\label{sec:config}
 	In this component are defined a few variables that a sysadmin can change, \ul{before the installation of the
-	shield}, to tune it according to his needs. In particular there are:
+	shield}, to tune it according to their needs. In particular there are:
 	\begin{itemize}
-		\item two boolean variables to decide whether or not to secure system call table and \texttt{IDT} respectively,
+		\item two boolean variables to decide whether or not to secure system call table and \texttt{IDT} respectively;
 		\item the list of additional symbols to protect, \ul{where you do not have to specify the address directly},
-		but the name of the symbol, readable from \texttt{/proc/kallysms},
+		but the name of the symbol, readable from \texttt{/proc/kallysms};
 		\item the modules inside the white and the black list.
 	\end{itemize}
 
@@ -234,10 +233,10 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 	follows.
 
 	\subsubsection{Kretprobe hooked to \texttt{do\_init\_module}}
-	This probe mechanism makes use of dedicated data structures (list.~\ref{lst:krp-data}) shown below:
+	This probe mechanism makes use of dedicated data structures (list.~\ref{lst:krp-data}):
 	\begin{itemize}
-		\item the enumeration \texttt{post\_do\_init\_module\_activitie}, which contains all possible activities that
-		the pre-handler can schedule to do for the post-handler,
+		\item the enumeration \texttt{post\_do\_init\_module\_activities}, which contains all possible activities that
+		the pre-handler can schedule to do for the post-handler;
 		\item the structure \texttt{krp\_do\_init\_module\_data}, which contains elements that must be passed from the
 		pre-handler to the post one.
 	\end{itemize}
@@ -246,18 +245,18 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 	The pre-handler of \texttt{do\_init\_module} function is \texttt{start\_monitoring\_module} in which:
 	\begin{enumerate}
 		\item the address of the \texttt{module} structure (1$^{\text{st}}$ parameter) is retrieved using \texttt{regs\_get\_kernel\_argument} instead of accessing directly \texttt{RDI} register to enhance
-		portability of the code,
+		portability of the code;
 		\item it is checked if the module belongs to the white list and if so, the remaining part is skipped
 		and the function return immediately\footnote{It should be noted that returning a value other than \texttt{0}
-		(e.g. \texttt{-EINVAL}), the post handler is not activated.},
-		\item it is checked if the module belongs to the black list and if so, it is \ul{invalidated} and the function
-		returns immediately,
-		\item the structure \texttt{monitored\_module} (sec~\ref{sec:shield}) is initialized,
-		\item all the functions inside the module are hooked up, by making an ELF inspection. If this activity were carried out in the post handler,
-		a scenario would be possible in which:
+		(e.g. \texttt{-EINVAL}), the post handler is not activated.};
+		\item it is checked if the module belongs to the black list and if so, it is invalidated and the function
+		returns immediately;
+		\item the structure \texttt{monitored\_module} (sec~\ref{sec:shield}) is initialized;
+		\item all the functions inside the module are hooked up, by making an ELF inspection. If this activity were
+		carried out in the post handler	a scenario would be possible in which:
 		\begin{enumerate}
-			\item in the \texttt{mod->init} function the malicious module schedule a deferred work,
-			\item this starts to execute, \textbf{before} the kretprobe is attached.
+			\item in the \texttt{mod->init} function the malicious module schedule a deferred work
+			\item this one starts to execute, \textbf{before} the kretprobe is attached
 		\end{enumerate}
 
 		\begin{custombox}{Please note}{yellow}
@@ -272,7 +271,7 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 	To invalidate a module, the \texttt{krp\_do\_init\_module\_data} structure is used. In particular, depending on the
 	value of the \texttt{what\_to\_do} member, the pointer enclosed in the \texttt{union} assumes a different semantics:
 	\begin{itemize}
-		\item if \texttt{what\_to\_do} is \texttt{REMOVE\_MODULE}, therefore the pointer is a \texttt{struct module *},
+		\item if \texttt{what\_to\_do} is \texttt{REMOVE\_MODULE}, therefore the pointer is a \texttt{struct module *};
 		\item otherwise the pointer is \texttt{struct monitored module *}.
 	\end{itemize}
 
@@ -283,10 +282,11 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 	The behavior of the post-handler (function \texttt{verify\_after\_module\_installation}) is driven by the value of
 	the \texttt{what\_to\_to} member:
 	\begin{itemize}
-		\item if \texttt{REMOVE\_MODULE}, then the \texttt{free\_module} function is invoked on the pointer to \texttt{struct
-		module},
-		\item else, if \texttt{REMOVE\_MONITORED\_MODULE} then the \texttt{remove\_malicious\_lkm} function (sec.~\ref{sec:shield}) is invoked on the \texttt{struct monitored\_module} pointer,
-		\item else (\texttt{DONT\_REMOVE}) the \texttt{verify\_safe\_area} function (sec~\ref{sec:safemem}) is invoked and in case of threat detected, \texttt{remove\_malicious\_lkm} is invoked
+		\item if \texttt{REMOVE\_MODULE}, then the \texttt{free\_module} function is invoked on the pointer to
+		\texttt{struct module};
+		\item else, if \texttt{REMOVE\_MONITORED\_MODULE} then the \texttt{remove\_malicious\_lkm} function
+		(sec.~\ref{sec:shield}) is invoked on the \texttt{struct monitored\_module} pointer;
+		\item else (\texttt{DONT\_REMOVE}) the \texttt{verify\_safe\_area} function (sec~\ref{sec:safemem}) is invoked and in case of threat detected, \texttt{remove\_malicious\_lkm} is invoked.
 	\end{itemize}
 
 	In any case in the very end of the function, the barrier is released.
@@ -295,9 +295,9 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 	Every function inside a monitored module is hooked up with a kretprobe such that:
 	\begin{itemize}
 		\item in the \textbf{pre-handler} simply nested verification are avoided by checking \texttt{under\_analysis}
-		flag and then an attempt is made to acquire the lock,
+		flag and then an attempt is made to acquire the lock;
 		\item in the \textbf{post-handler}, \texttt{verify\_safe\_area} is invoked and in case of threat
-		detected, \texttt{remove\_malicious\_lkm} is invoked
+		detected, \texttt{remove\_malicious\_lkm} is invoked.
 	\end{itemize}
 
 	\subsubsection{Kprobe hooked to \texttt{free\_module}}
@@ -313,12 +313,12 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 
 	\subsection{\emph{Safe memory} component}\label{sec:safemem}
 	This is one of the core components of the module. Inside of it, it is defined the data structure
-	\texttt{safe\_area} (list.~\ref{lst:safe-area}), which is the logical representation of the caching of the state of
-	a specific \textit{quad word} (\texttt{64 bits}) in memory.
+	\texttt{safe\_area} (list.~\ref{lst:safe-area}), which is the logical representation for the caching of	a specific
+	\textit{quad word} (\texttt{64 bits}) in memory.
 
 	Inside the module three different arrays of \texttt{safe\_area} structures are used:
 	\begin{itemize}
-		\item one for system call table function pointer, of size \texttt{NR\_syscalls},
+		\item one for system call table function pointer, of size \texttt{NR\_syscalls};
 		\item one for \texttt{IDT}, seen as a sequence of \texttt{unsigned long}, which implies that the size of array
 		is evaluated as:
 		\begin{equation*}
@@ -327,12 +327,12 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 		\item one for the list of additional symbols specified inside the array in the configuration file.
 	\end{itemize}
 
-	One of the main functions defined in this module is \texttt{verify\_safe\_areas} used in of some handlers defined
+	One of the main functions defined in this module is \texttt{verify\_safe\_areas} used in some handlers defined
 	into the \emph{hooks} component. Inside, \texttt{inspect\_sa} is called for each array to check if
 	critical memory areas have been altered. In this case:
 
 	\begin{itemize}
-		\item a new threat is added to the \texttt{/sys} audit (sec.~\ref{sec:threats}),
+		\item a new threat is added to the \texttt{/sys} audit (sec.~\ref{sec:threats});
 		\item the hacked memory area is restored, after disabling the memory protection by overwriting the \texttt{CR0}
 		register (sec~\ref{sec:x86}).
 	\end{itemize}
@@ -365,13 +365,13 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 	\end{figure}
 
 	Inside this component is defined also a parameter of the module, that is the \texttt{removed} variable. At any time
-	is it possible to see how many modules have been detected as malicious reading the content of
-	\texttt{/sys/module/mlkm\_shield/parameters/removed} pseudo-file.
+	is it possible to see how many modules have been detected as malicious reading the content of the pseudo-file
+	\texttt{/sys/module/mlkm\_shield/parameters/removed}.
 
 	An interesting function defined inside this module is \texttt{remove\_malicious\_lkm}. To remove a module you need
 	to use the function \texttt{free\_module}, which is not exported by default for module programming. For this
-	reason, using a function defined inside the \textbf{symbols} component (sec.~\ref{sec:symbols}) its address has
-	been retrieved.
+	reason, its address has been retrieved using a function defined inside the \textbf{symbols} component
+	(sec.~\ref{sec:symbols}).
 
 	\subsection{\emph{Symbols} component}\label{sec:symbols}
 	In this component are defined some utility functions used by other ones, such as:
@@ -379,21 +379,22 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 		\item \texttt{symbol\_lookup}, which allows you to retrieve the address of a symbol in the kernel memory space
 		specifying its name. To do this you need to use the \texttt{kallsyms\_lookup\_name} function, which is no
 		longer available for module programming starting with kernel 5.7, so the kprobing mechanism was used to
-		retrieve its address,
+		retrieve its address;
 		\item \texttt{get\_system\_call\_table\_address}, which by relying on the previous one, lets you to retrieve
 		the address of the system call table. Up to version 4.4 of Linux, the search is carried out according to a
 		brute force approach, starting from the address of \texttt{the sys\_close} system call\footnote{For
-			conventional Linux Kernel builds, this address is lower than the system call table one.},
+			conventional Linux Kernel builds, this address is lower than the system call table one.};
 		\item \texttt{get\_idt\_address}, which allows you to retrieve the base address of the \texttt{IDT}, by relying
 		on the \texttt{SIDT} instruction wrapped into the
 		\href{https://elixir.bootlin.com/linux/latest/source/arch/x86/include/asm/desc.h#L223}{\texttt{store\_idt}} API
-		of the kernel
+		of the kernel.
 	\end{itemize}
 
 	\subsection{\emph{Threat audit on \texttt{sysfs}} component}\label{sec:threats}
 	This component realize an additional feature for the module. The idea is to provide an easier way to know if some
-	threats are detected, instead of analyze \texttt{dmesg} output. This way is the pseudo-file in \texttt{sysfs}
-	\texttt{/sys/kernel/mlkm\_shield/threats} (fig.~\ref{fig:threats}).
+	threats are detected, instead of analyze \texttt{dmesg} output. This is exploited using the pseudo-file in \texttt{sysfs}:
+
+	\centerline{\texttt{/sys/kernel/mlkm\_shield/threats}}
 
 	\begin{figure}[!htbp]
 		\centering
@@ -425,9 +426,9 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 	\section{Module installation}
 	To install \texttt{mlkm\_shield} module it is possible to exploit rules specified inside the \texttt{Makefile}:
 	\begin{itemize}
-		\item \terminal{\$ make} to build the module, using the \texttt{make modules} rule of \texttt{Kbuild},
-		\item \terminal{\# make install} to mount the module, using \texttt{/sbin/insmod} command,
-		\item \terminal{\$ make clean} cleanup the build output rimuove from the local working directory,
+		\item \terminal{\$ make} to build the module, using the \texttt{make modules} rule of \texttt{Kbuild};
+		\item \terminal{\# make install} to mount the module, using \texttt{/sbin/insmod} command;
+		\item \terminal{\$ make clean} cleanup the build output rimuove from the local working directory;
 		\item \terminal{\# make clean-all} in addition to the \terminal{\$ make clean} command, unmount the module
 		using \texttt{/sbin/rmmod} command \ul{if this is actually mounted, using a conditional construct to avoid
 		errors}.
@@ -504,11 +505,11 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 	Some ideas to enhance the possibilities of this module to detect malicious LKM are shown below:
 	\begin{itemize}
 		\item calculate and cache the hash of the body of each system call/interrupt handler to eventually identify hot
-		patching attempts,
+		patching attempts;
 		\item cache the status of some fields of the module structure (e.g. \texttt{sect\_attrs}) and then check if
-		they remain unchanged after execution of \texttt{mod->init},
+		they remain unchanged after execution of \texttt{mod->init};
 		\item verify if the module remove itself from the linked list, because this can be a sign that it is
-		malicious (\textit{why a module needs to hide itself?})
+		malicious (\textit{why a module needs to hide itself?}).
 	\end{itemize}
 
 	\section{Source codes mentioned in the document}
