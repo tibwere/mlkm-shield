@@ -245,8 +245,7 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 
 	The pre-handler of \texttt{do\_init\_module} function is \texttt{start\_monitoring\_module} in which:
 	\begin{enumerate}
-		\item the address of the \texttt{module} structure (1$^{\text{st}}$ parameter) is retrieved using the dedicated
-		API \texttt{regs\_get\_kernel\_argument} instead of accessing directly \texttt{RDI} register to enhance
+		\item the address of the \texttt{module} structure (1$^{\text{st}}$ parameter) is retrieved using \texttt{regs\_get\_kernel\_argument} instead of accessing directly \texttt{RDI} register to enhance
 		portability of the code,
 		\item it is checked if the module belongs to the white list and if so, the remaining part is skipped
 		and the function return immediately\footnote{It should be noted that returning a value other than \texttt{0}
@@ -284,9 +283,9 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 	The behavior of the post-handler (function \texttt{verify\_after\_module\_installation}) is driven by the value of
 	the \texttt{what\_to\_to} member:
 	\begin{itemize}
-		\item if \texttt{REMOVE\_MODULE} the \texttt{free\_module} function is invoked on the pointer to \texttt{struct
+		\item if \texttt{REMOVE\_MODULE}, then the \texttt{free\_module} function is invoked on the pointer to \texttt{struct
 		module},
-		\item else, if \texttt{REMOVE\_MONITORED\_MODULE}, the \texttt{remove\_malicious\_lkm} function (sec.~\ref{sec:shield}) is invoked on the pointer to \texttt{struct monitored\_module},
+		\item else, if \texttt{REMOVE\_MONITORED\_MODULE} then the \texttt{remove\_malicious\_lkm} function (sec.~\ref{sec:shield}) is invoked on the \texttt{struct monitored\_module} pointer,
 		\item else (\texttt{DONT\_REMOVE}) the \texttt{verify\_safe\_area} function (sec~\ref{sec:safemem}) is invoked and in case of threat detected, \texttt{remove\_malicious\_lkm} is invoked
 	\end{itemize}
 
@@ -297,7 +296,7 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 	\begin{itemize}
 		\item in the \textbf{pre-handler} simply nested verification are avoided by checking \texttt{under\_analysis}
 		flag and then an attempt is made to acquire the lock,
-		\item it the \textbf{post-handler} the \texttt{verify\_safe\_area} function is invoked and in case of threat
+		\item in the \textbf{post-handler}, \texttt{verify\_safe\_area} is invoked and in case of threat
 		detected, \texttt{remove\_malicious\_lkm} is invoked
 	\end{itemize}
 
