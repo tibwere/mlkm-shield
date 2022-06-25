@@ -1,9 +1,10 @@
 \documentclass{article}
 
 % Package necessari
-\usepackage[a4paper]{geometry}
+\usepackage{geometry}
 \usepackage[utf8]{inputenc}
 \usepackage[english]{babel}
+\usepackage[sfdefault]{roboto}
 \usepackage[T1]{fontenc}
 \usepackage[font={small,sl}]{caption}
 \usepackage[font={small,sl}]{subcaption}
@@ -17,6 +18,14 @@
 \usepackage{tabularray}
 \usepackage{amssymb}
 
+% Impostazione dei margini
+\geometry{
+	a4paper,
+	left=20 mm,
+	top=20 mm,
+	bottom=20 mm,
+	right=20 mm,
+}
 
 % Titolo del documento
 \title{\small Report of "Network \& System defense" project \\
@@ -25,7 +34,7 @@
 
 % Autore del documento
 \author{Simone Tiberi (M. 0299908)\\%
-(email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.com}})}
+email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.com}}}
 
 % Data del documento
 \date{\today}
@@ -57,6 +66,7 @@
 \definecolor{tn-blue}{HTML}{7aa2f7}
 \definecolor{tn-cyan}{HTML}{7dcfff}
 
+% Impostazioni listings
 \lstset{
 	language=C,
 	frame=shadowbox,
@@ -79,18 +89,27 @@
 	keepspaces=true
 }
 
+% Cartella di default delle immagini
 \graphicspath{ {./figs/} }
 
-\newtcolorbox{custombox}[2]{
-	colframe  = #2!25,
-    colback   = #2!10,
-    coltitle  = #2!50!black,
-    title     = #1,
-	fonttitle = \bfseries,
-    breakable,
-    enhanced,
+% Impostazioni della colorbox
+\newtcolorbox{custombox}[2]{%
+	colback=white,
+	colframe=#2,
+	colbacktitle=white!90!#2,
+	coltitle=black,
+	fonttitle=\bfseries,
+	fontupper=\small,
+	title=#1,
+	enhanced,
+	left=2pt, right=2pt, top=8pt, bottom=2pt,
+	attach boxed title to top center={yshift=-3mm}
 }
 
+% Non mostrare le sotto-sezioni nella tavola dei contenuti
+\setcounter{tocdepth}{2}
+
+% Comando utile per "mostrare una shell" nel documento (e.g. per i comandi)
 \newcommand{\terminal}[1]{\colorbox{tn-bg}{\textcolor{tn-fg}{\texttt{#1}}}}
 
 \begin{document}
