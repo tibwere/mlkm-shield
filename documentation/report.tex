@@ -428,8 +428,8 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 	\begin{itemize}
 		\item \terminal{\$ make} to build the module, using the \texttt{make modules} rule of \texttt{Kbuild};
 		\item \terminal{\# make install} to mount the module, using \texttt{/sbin/insmod} command;
-		\item \terminal{\$ make clean} cleanup the build output rimuove from the local working directory;
-		\item \terminal{\# make clean-all} in addition to the \terminal{\$ make clean} command, unmount the module
+		\item \terminal{\$ make clean} to cleanup the build output from the local working directory;
+		\item \terminal{\# make clean-all}, in addition to the previous one, to unmount the module
 		using \texttt{/sbin/rmmod} command if this is actually mounted, using a conditional construct to avoid
 		errors.
 	\end{itemize}
