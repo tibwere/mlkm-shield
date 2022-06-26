@@ -177,9 +177,9 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 	Obviously, using only this mechanism, a condition like the following one could occur:
 	\begin{itemize}
 		\item a non-malicious module $A$ is running a function $\alpha$,
-		\item a malicious module $B$ is running \ul{concurrently} (such as shown in fig.~\ref{fig:concurrency}) a
+		\item a malicious module $B$ is running \textbf{concurrently} (such as shown in fig.~\ref{fig:concurrency}) a
 		function $\beta$,
-		\item the shield module recognize $A$ as malicious \ul{and also $B$ as non-malicious} thus \textbf{making two
+		\item the shield module recognize $A$ as malicious and also $B$ as non-malicious thus \textbf{making two
 		mistakes}.
 	\end{itemize}
 
@@ -219,11 +219,11 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 	\end{itemize}
 
 	\subsection{\emph{Configuration} component}\label{sec:config}
-	In this component are defined a few variables that a sysadmin can change, \ul{before the installation of the
-	shield}, to tune it according to their needs. In particular there are:
+	In this component are defined a few variables that a sysadmin can change, before the installation of the
+	shield, to tune it according to their needs. In particular there are:
 	\begin{itemize}
 		\item two boolean variables to decide whether or not to secure system call table and \texttt{IDT} respectively;
-		\item the list of additional symbols to protect, \ul{where you do not have to specify the address directly},
+		\item the list of additional symbols to protect, where you do not have to specify the address directly,
 		but the name of the symbol, readable from \texttt{/proc/kallysms};
 		\item the modules inside the white and the black list.
 	\end{itemize}
@@ -259,7 +259,7 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 			\item this one starts to execute, \textbf{before} the kretprobe is attached
 		\end{enumerate}
 
-		\begin{custombox}{Please note}{yellow}
+		\begin{custombox}{Pay attention}{Goldenrod}
 			If the
 			\href{https://elixir.bootlin.com/linux/v5.17/source/include/asm-generic/kprobes.h#L15}{\texttt{NOKPROBE\_SYMBOL}}
 			macro is applied to a function within the module, this could not be fully monitored, so it is judged
@@ -430,8 +430,8 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 		\item \terminal{\# make install} to mount the module, using \texttt{/sbin/insmod} command;
 		\item \terminal{\$ make clean} cleanup the build output rimuove from the local working directory;
 		\item \terminal{\# make clean-all} in addition to the \terminal{\$ make clean} command, unmount the module
-		using \texttt{/sbin/rmmod} command \ul{if this is actually mounted, using a conditional construct to avoid
-		errors}.
+		using \texttt{/sbin/rmmod} command if this is actually mounted, using a conditional construct to avoid
+		errors.
 	\end{itemize}
 
 	\section{Tests carried out}
