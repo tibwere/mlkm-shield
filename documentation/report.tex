@@ -89,6 +89,13 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 	keepspaces=true
 }
 
+\lstdefinelanguage{diff}{
+	basicstyle=\color{tn-fg}\ttfamily\scriptsize,
+	morecomment=[f][\color{tn-comment}\scriptsize]{@@},
+	morecomment=[f][\color{tn-green}\scriptsize]{+\ },
+	morecomment=[f][\color{tn-red}\scriptsize]{-\ },
+}
+
 % Cartella di default delle immagini
 \graphicspath{ {./figs/} }
 
@@ -136,7 +143,8 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 	The code base is divided into several files, each of which contains stuffs relating to certain components of the
 	project (e.g. hooks, \textit{machine-specific} operations, \dots).
 
-	The following sections are aimed at describing each of them, by analyzing core data structures and procedures implemented, as well as the general idea behind the functioning of the module.
+	The following sections are aimed at describing each of them, by analyzing core data structures and procedures
+	implemented, as well as the general idea behind the functioning of the module.
 
 	\section{Introduction to LKM monitoring}
 	The protection mechanism is based on the following assumptions:
@@ -147,7 +155,8 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 		Because of this, in the beginning of the installation process the state of the critical memory areas is cached;
 
 		\item the areas to be protected are immutable over the time and therefore it is not necessary to update the
-		caching status \textit{continuously}. This is reasonable too, especially for memory areas like system call table and \texttt{IDT};
+		caching status \textit{continuously}. This is reasonable too, especially for memory areas like system call
+		table and \texttt{IDT};
 
 		\item any module not monitored by the shield does not make any changes in critical memory areas.
 	\end{enumerate}
@@ -164,7 +173,7 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 	\end{itemize}
 
 	Taking advantage of the \texttt{kretpobe} (and also \texttt{kprobe}) mechanisms offered by Linux
-	Kernel, the very last function invoked by the kernel inside the mounting process is hooked, so
+	Kernel, the very last function invoked inside the mounting process is hooked, so
 	that after the return statement, a \textbf{verification step} can begin (fig.~\ref{fig:monitoring}).
 
 	\begin{figure}[!htbp]
@@ -198,11 +207,12 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 		the execution of their activities.
 	\end{enumerate}
 
-	This mechanism ensures that no other monitored module can interfere, but obviously it causes an inevitable performance degradation due to the introduction of a synchronization mechanism.
+	This mechanism ensures that no other monitored module can interfere, but obviously it causes an inevitable
+	performance degradation due to the introduction of a synchronization mechanism.
 
 	Finally, for the detection of malicious actions in deferred mode, the probe mechanism was exploited again in the
 	same way, this time dynamically hooking functions inside the modules, as described in detail in
-	sec.~\ref{sec:hooks}.
+	section~\ref{sec:hooks}.
 
 	\section{Components description}
 
@@ -214,12 +224,12 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 		is not subject to monitoring, which implies that it will not be damaged in terms of performance, due to the use
 		of kretprobes and spinlocks,
 		\item a module present in the \textbf{black list} is considered \textit{a priori} malicious and therefore is
-		removed directly. In sec.~\ref{sec:hooks} it will be showed the mechanism used to safely remove this kind of
+		removed directly. In section~\ref{sec:hooks} it will be showed the mechanism used to safely remove this kind of
 		module without risking the execution of malicious code.
 	\end{itemize}
 
 	\subsection{\emph{Configuration} component}\label{sec:config}
-	In this component are defined a few variables that a sysadmin can change, before the installation of the
+	Some variables are defined in this component that a sysadmin can change, before the installation of the
 	shield, to tune it according to their needs. In particular there are:
 	\begin{itemize}
 		\item two boolean variables to decide whether or not to secure system call table and \texttt{IDT} respectively;
@@ -244,7 +254,8 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 
 	The pre-handler of \texttt{do\_init\_module} function is \texttt{start\_monitoring\_module} in which:
 	\begin{enumerate}
-		\item the address of the \texttt{module} structure (1$^{\text{st}}$ parameter) is retrieved using \texttt{regs\_get\_kernel\_argument} instead of accessing directly \texttt{RDI} register to enhance
+		\item the address of the \texttt{module} structure (1$^{\text{st}}$ parameter) is retrieved using
+		\texttt{regs\_get\_kernel\_argument} instead of accessing directly \texttt{RDI} register to enhance
 		portability of the code;
 		\item it is checked if the module belongs to the white list and if so, the remaining part is skipped
 		and the function return immediately\footnote{It should be noted that returning a value other than \texttt{0}
@@ -253,7 +264,7 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 		returns immediately;
 		\item the structure \texttt{monitored\_module} (sec~\ref{sec:shield}) is initialized;
 		\item all the functions inside the module are hooked up, by making an ELF inspection. If this activity were
-		carried out in the post handler	a scenario would be possible in which:
+		carried out in the post handler	a scenario like the following one would be possible:
 		\begin{enumerate}
 			\item in the \texttt{mod->init} function the malicious module schedule a deferred work
 			\item this one starts to execute, \textbf{before} the kretprobe is attached
@@ -286,7 +297,8 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 		\texttt{struct module};
 		\item else, if \texttt{REMOVE\_MONITORED\_MODULE} then the \texttt{remove\_malicious\_lkm} function
 		(sec.~\ref{sec:shield}) is invoked on the \texttt{struct monitored\_module} pointer;
-		\item else (\texttt{DONT\_REMOVE}) the \texttt{verify\_safe\_area} function (sec~\ref{sec:safemem}) is invoked and in case of threat detected, \texttt{remove\_malicious\_lkm} is invoked.
+		\item else (\texttt{DONT\_REMOVE}) the \texttt{verify\_safe\_area} function (sec~\ref{sec:safemem}) is invoked
+		and in case of threat detected, \texttt{remove\_malicious\_lkm} is invoked.
 	\end{itemize}
 
 	In any case in the very end of the function, the barrier is released.
@@ -305,7 +317,7 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 	module is unmounted (because a threat has found or simply because someone has invoked \texttt{rmmod} on it).
 
 	For this reason, a kprobe is hooked to the \texttt{free\_module} function and in the pre-handler, if the
-	module to be freed is currently monitored it is cleaned up and removed from the list.
+	module to be freed is currently monitored, it is cleaned up and removed from the list.
 
 	\subsection{\emph{Module} component}\label{sec:module}
 	This component simply defines \texttt{init} and \texttt{cleanup} functions and also some elements for module
@@ -318,7 +330,7 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 
 	Inside the module three different arrays of \texttt{safe\_area} structures are used:
 	\begin{itemize}
-		\item one for system call table function pointer, of size \texttt{NR\_syscalls};
+		\item one for system call table function pointers, of size \texttt{NR\_syscalls};
 		\item one for \texttt{IDT}, seen as a sequence of \texttt{unsigned long}, which implies that the size of array
 		is evaluated as:
 		\begin{equation*}
@@ -327,9 +339,9 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 		\item one for the list of additional symbols specified inside the array in the configuration file.
 	\end{itemize}
 
-	One of the main functions defined in this module is \texttt{verify\_safe\_areas} used in some handlers defined
-	into the \emph{hooks} component. Inside, \texttt{inspect\_sa} is called for each array to check if
-	critical memory areas have been altered. In this case:
+	One of the main functions defined in this component is \texttt{verify\_safe\_areas} used in some handlers defined
+	into the \emph{hooks} component. Inside of it, the function \texttt{inspect\_sa} is called for each array to check
+	if critical memory areas have been altered. In this case:
 
 	\begin{itemize}
 		\item a new threat is added to the \texttt{/sys} audit (sec.~\ref{sec:threats});
@@ -391,8 +403,9 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 	\end{itemize}
 
 	\subsection{\emph{Threat audit on \texttt{sysfs}} component}\label{sec:threats}
-	This component realize an additional feature for the module. The idea is to provide an easier way to know if some
-	threats are detected, instead of analyze \texttt{dmesg} output. This is exploited using the pseudo-file in \texttt{sysfs}:
+	This component realizes an additional feature for the module. The idea is to provide an easier way to know if some
+	threats are detected, instead of analyze \texttt{dmesg} output. This is exploited using the pseudo-file in
+	\texttt{sysfs}:
 
 	\centerline{\texttt{/sys/kernel/mlkm\_shield/threats}}
 
@@ -403,14 +416,14 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 		\label{fig:threats}
 	\end{figure}
 
-	To do this, first of all is defined a structure \texttt{threat} in which are contained all information printed out
-	in this pseudo-file (list~\ref{lst:threats}).
+	To do this, first of all it is defined a structure \texttt{threat} in which are contained all information printed
+	out in this pseudo-file (list.~\ref{lst:threats}).
 
 	Every time that a threat is detected, \texttt{insert\_new\_threat} is invoked to add an instance of \texttt{struct
 	threat} to the list. Since the insertion needs to be synchronized, if it happened along the thread that is
 	verifying, it would cause a block which could be unwanted. For this reason, the workqueue mechanism is exploited by
 	declaring the \texttt{threats-sys-audit} single-threaded queue (to maintain the FIFO ordering) and inserting the
-	requests to add to the list inside it.
+	request for addition in it.
 
 	\subsection{\emph{Machine specific (x86)} component}\label{sec:x86}
 	This component simply contains a function and a couple of macros to modify \texttt{CR0} register to enable/disable
@@ -455,7 +468,10 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 	\end{table}
 
 
-	As you can see in tab.~\ref{table:pc}, a performance comparison was made using the physical machine. The test aims to show the overhead impact of the shield on the mount/unmount phase of other modules. In this regard, a deliberately simple module (list.~\ref{lst:dummy}) was used, to evaluate the performance of the mount (\textit{resp. unmount}) process in a more isolated way without the influence of the overhead of the
+	As you can see in tab.~\ref{table:pc}, a performance comparison was made using the physical machine. The test aims
+	to show the overhead impact of the shield on the mount/unmount phase of other modules. In this regard, a
+	deliberately simple module (list.~\ref{lst:dummy}) was used, to evaluate the performance of the mount
+	(\textit{resp. unmount}) process in a more isolated way without the influence of the overhead of the
 	\texttt{mod->init} (\textit{resp. \texttt{mod->exit}}) itself.
 
 	\begin{table}[htbp]
@@ -475,7 +491,8 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 		\label{table:pc}
 	\end{table}
 
-	Furthermore, tab.~\ref{table:tests} shows a list of modules on which the shield has been tested and the result obtained.
+	Furthermore, tab.~\ref{table:tests} shows a list of modules on which the shield has been tested and the result
+	obtained.
 
 	\begin{table}[htbp]
 		\centering
@@ -487,11 +504,13 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 				row{1} = {tn-blue0!80,font=\footnotesize\color{white}},
 			}
 			Module & Outcome & Reason & Notes & Status\\
-			\texttt{rootkit} & {\color{red}\textbf{removed}} & a function is not hookable & example module used in
+			\texttt{rootkit} & {\color{red}\textbf{removed}} & a function is not hookable & example module discussed in
 			class & \textbf{\color{ForestGreen}\checkmark}\\
-			\texttt{the\_usctm} & {\color{red}\textbf{removed}} & a critical area area changed & Github
+			\texttt{the\_usctm} & {\color{red}\textbf{removed}} & a critical area changed & Github
 			\href{https://github.com/FrancescoQuaglia/Linux-sys_call_table-discoverer}{link} &
 			\textbf{\color{ForestGreen}\checkmark}\\
+			\texttt{the\_tasklet\_usctm} & {\color{red}\textbf{removed}} & a critical area changed & patch of the
+			original \texttt{the\_usctm} (list.~\ref{lst:tasklet-usctm}) & \textbf{\color{ForestGreen}\checkmark}\\
 			\texttt{dummy\_module} & {\color{ForestGreen}\textbf{not removed}} & the LKM is not malicious & module
 			written by me (list.~\ref{lst:dummy}) & \textbf{\color{ForestGreen}\checkmark}\\
 			\texttt{symbol\_finder} & {\color{ForestGreen}\textbf{not removed}} & the LKM is not malicious & module
@@ -556,5 +575,12 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 		label={lst:symbfnd},
 		escapechar=,
 	]{code/symbol_finder.c}
+
+	\lstinputlisting[
+		language=diff,
+		caption={Changes needed to build the tasklet version of \texttt{the\_usctm} (diff-like representation)},
+		label={lst:tasklet-usctm},
+		escapechar=,
+	]{code/tasklet_usctm.diff}
 
 \end{document}

@@ -1,0 +1,20 @@
+@@ Diff n.1 (tasklet declaration and new init_module definition) @@
++ void tasklet_body(struct tasklet_struct *);
++ DECLARE_TASKLET(my_tasklet, tasklet_body);
+
++ int init_module(void)
++ {
++         tasklet_schedule(&my_tasklet);
++         return 0;
++ }
+
+@@ Diff n.2 (conversion of the old init module into the tasklet entry point) @@
+- int init_module(void) {
++ void tasklet_body(struct tasklet_struct *ts) {
+
+
+@@ Diff n.3 (addition of the tasklet explicit kill within the cleanup function) @@
+void cleanup_module(void) {
++
++        tasklet_kill(&my_tasklet);
+
