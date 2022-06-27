@@ -140,7 +140,7 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 		Link to Github repository: \url{https://github.com/tibwere/mlkm-shield}
 	\end{custombox}
 
-	The code base is divided into several files, each of which contains stuffs relating to certain components of the
+	The code base is divided into several files, each of which contains stuffs relating to a certain component of the
 	project (e.g. hooks, \textit{machine-specific} operations, \dots).
 
 	The following sections are aimed at describing each of them, by analyzing core data structures and procedures
@@ -201,7 +201,7 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 
 	For this reason, the use of a \textit{barrier} was introduced. The idea is the following:
 	\begin{enumerate}
-		\item in the \textbf{pre-handler} the thread that is mounting the module, try to acquire a \texttt{spin\_lock}
+		\item in the \textbf{pre-handler} the thread that is mounting the module, tries to acquire a \texttt{spin\_lock}
 		before do it;
 		\item in the \textbf{post-handler} the thread releases the lock allowing other monitored modules to progress in
 		the execution of their activities.
@@ -258,7 +258,7 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 		\texttt{regs\_get\_kernel\_argument} instead of accessing directly \texttt{RDI} register to enhance
 		portability of the code;
 		\item it is checked if the module belongs to the white list and if so, the remaining part is skipped
-		and the function return immediately\footnote{It should be noted that returning a value other than \texttt{0}
+		and the function returns immediately\footnote{It should be noted that returning a value other than \texttt{0}
 		(e.g. \texttt{-EINVAL}), the post handler is not activated.};
 		\item it is checked if the module belongs to the black list and if so, it is invalidated and the function
 		returns immediately;
@@ -266,7 +266,7 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 		\item all the functions inside the module are hooked up, by making an ELF inspection. If this activity were
 		carried out in the post handler	a scenario like the following one would be possible:
 		\begin{enumerate}
-			\item in the \texttt{mod->init} function the malicious module schedules a deferred work
+			\item in the \texttt{mod->init} function, the malicious module schedules a deferred work
 			\item this one starts to execute \textbf{before} the \texttt{kretprobe} is attached
 		\end{enumerate}
 
@@ -298,17 +298,17 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 		\item else, if \texttt{REMOVE\_MONITORED\_MODULE} then the \texttt{remove\_malicious\_lkm} function
 		(sec.~\ref{sec:shield}) is invoked on the \texttt{struct monitored\_module} pointer;
 		\item else (\texttt{DONT\_REMOVE}) the \texttt{verify\_safe\_area} function (sec~\ref{sec:safemem}) is invoked
-		and in case of threat detected, \texttt{remove\_malicious\_lkm} is invoked.
+		and in case of a threat detection, \texttt{remove\_malicious\_lkm} is invoked.
 	\end{itemize}
 
-	In any case in the very end of the function, the barrier is released.
+	In any case, in the very end of the function, the barrier is released.
 
 	\subsubsection{Kretprobe hooked to functions inside monitored modules}
 	Every function inside a monitored module is hooked up with a \texttt{kretprobe} such that:
 	\begin{itemize}
-		\item in the \textbf{pre-handler} nested verification are avoided by checking \texttt{under\_analysis}
+		\item in the \textbf{pre-handler}, nested verification are avoided by checking \texttt{under\_analysis}
 		flag and then an attempt is made to acquire the lock;
-		\item in the \textbf{post-handler}, \texttt{verify\_safe\_area} is invoked and in case of threat
+		\item in the \textbf{post-handler}, \texttt{verify\_safe\_area} is invoked and in case of a threat
 		detection, \texttt{remove\_malicious\_lkm} is invoked.
 	\end{itemize}
 
@@ -377,7 +377,7 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 	\end{figure}
 
 	Inside this component is defined also a parameter of the module, that is the \texttt{removed} variable. At any time
-	is it possible to see how many modules have been detected as malicious reading the content of the pseudo-file
+	it is possible to see how many modules have been detected as malicious reading the content of the pseudo-file
 	\texttt{/sys/module/mlkm\_shield/parameters/removed}.
 
 	An interesting function defined inside this module is \texttt{remove\_malicious\_lkm}. To remove a module you need
@@ -448,7 +448,7 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 	\end{itemize}
 
 	\section{Tests carried out}
-	The tab.~\ref{table:machines} summarizes the specifications of the machines used to test the module.
+	The table~\ref{table:machines} summarizes the specifications of the machines used to test the module.
 
 	\begin{table}[htbp]
 		\centering
@@ -468,10 +468,10 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 	\end{table}
 
 
-	As you can see in tab.~\ref{table:pc}, a performance comparison was made using the physical machine. The test aims
-	to show the overhead impact of the shield on the mount/unmount phase of other modules. In this regard, a
-	deliberately simple module (list.~\ref{lst:dummy}) was used, to evaluate the performance of the mount
-	(\textit{resp. unmount}) process in a more isolated way without the influence of the overhead of the
+	As you can see in table~\ref{table:pc}, a performance comparison was made using the physical machine. The test aims
+	to show the overhead impact of the shield on the mount (\textit{resp. unmount}) phase of other modules. In this
+	regard, a deliberately simple module (list.~\ref{lst:dummy}) was used, to evaluate the performance of the mount
+	(\textit{resp. unmount}) process in a more isolated way, without the influence of the overhead of the
 	\texttt{mod->init} (\textit{resp. \texttt{mod->exit}}) itself.
 
 	\begin{table}[htbp]
@@ -491,7 +491,7 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 		\label{table:pc}
 	\end{table}
 
-	Furthermore, tab.~\ref{table:tests} shows a list of modules on which the shield has been tested and the result
+	Furthermore, table~\ref{table:tests} shows a list of modules on which the shield has been tested and the result
 	obtained.
 
 	\begin{table}[htbp]
@@ -531,6 +531,7 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 		malicious (\textit{why does a module need to hide itself?}).
 	\end{itemize}
 
+	\appendix
 	\section{Source codes mentioned in the document}
 	\lstinputlisting[
 		caption={Data types and structures defined inside \emph{hook} component},
@@ -565,6 +566,13 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 	]{../include/threats.h}
 
 	\lstinputlisting[
+		language=diff,
+		caption={Changes needed to build the tasklet version of \texttt{the\_usctm} (diff-like representation)},
+		label={lst:tasklet-usctm},
+		escapechar=,
+	]{code/tasklet_usctm.diff}
+
+	\lstinputlisting[
 		caption={Dummy module source code},
 		label={lst:dummy},
 		escapechar=,
@@ -575,12 +583,5 @@ email: \texttt{\href{mailto:simone.tiberi.98@gmail.com}{simone.tiberi.98@gmail.c
 		label={lst:symbfnd},
 		escapechar=,
 	]{code/symbol_finder.c}
-
-	\lstinputlisting[
-		language=diff,
-		caption={Changes needed to build the tasklet version of \texttt{the\_usctm} (diff-like representation)},
-		label={lst:tasklet-usctm},
-		escapechar=,
-	]{code/tasklet_usctm.diff}
 
 \end{document}
